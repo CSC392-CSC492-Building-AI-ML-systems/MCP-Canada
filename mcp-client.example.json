@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mcp-canada": {
+      "command": "/absolute/path/to/MCP-Canada/backend/.venv/bin/python",
+      "args": ["/absolute/path/to/MCP-Canada/backend/mcp_server.py"]
+    }
+  }
+}

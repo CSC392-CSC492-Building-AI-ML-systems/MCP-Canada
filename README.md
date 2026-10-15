@@ -89,3 +89,47 @@ At setup, npm reports five high-severity findings in the development-only
 ([advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)). npm currently offers
 no compatible fix; its suggested forced fix downgrades the Next.js lint config to
 an older major version. Recheck with `npm audit` when updating dependencies.
+
+## Python MCP server
+
+`backend/mcp_server.py` uses the [official Python MCP SDK](https://py.sdk.modelcontextprotocol.io/v1/),
+pinned to the v1 maintenance line. It runs alongside Django as a separate local
+**stdio** process. An MCP client launches it on demand; there is no extra port.
+No database or API key is required.
+
+The initial read-only tool is `health_check`. It calls the same application
+service as `GET /api/health/` and returns:
+
+```json
+{"status": "ok", "service": "django", "database": "disabled"}
+```
+
+It initializes Django directly, so you do not need the Django HTTP server running
+to use this tool. This checks application initialization, not HTTP server uptime.
+Add future application logic in `backend/api/services.py` and expose it through
+explicit `@mcp.tool()` functions in `backend/mcp_server.py`.
+
+Install dependencies using the backend setup commands above. For clients that
+accept an `mcpServers` JSON configuration, copy the entry from
+`mcp-client.example.json` into the client's configuration and replace both
+`/absolute/path/to/MCP-Canada` placeholders with your actual repository path.
+The client configuration has not been installed automatically.
+
+To launch manually from the repository root:
+
+```sh
+backend/.venv/bin/python backend/mcp_server.py
+```
+
+The process waits for MCP protocol input; it is not a browser endpoint or an
+interactive terminal. Normally, let your MCP client launch it. Avoid writing
+logs to stdout, which is reserved for protocol messages.
+
+Run the protocol integration test:
+
+```sh
+backend/.venv/bin/python backend/test_mcp.py
+```
+
+This launches the server, initializes a real MCP session, discovers its tools,
+and invokes `health_check` without a database or running HTTP server.
