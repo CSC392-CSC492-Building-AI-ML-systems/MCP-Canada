@@ -1,0 +1,3 @@
+.explorer { position: fixed; inset: 0; }
+.map { position: absolute; inset: 0; }
+.missingToken { max-width: 640px; margin: 15vh auto; padding: 0 16px; }
