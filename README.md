@@ -51,12 +51,16 @@ backend/
 
 ```sh
 backend/.venv/bin/python backend/manage.py check
-backend/.venv/bin/python backend/manage.py test api
+cd backend && .venv/bin/python manage.py test && cd ..
 cd frontend
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
+
+GitHub Actions runs these checks on every push and pull request
+(`.github/workflows/ci.yml`).
 
 After building, `npm start` serves the frontend production build. Django must
 still be running for API requests to work.
