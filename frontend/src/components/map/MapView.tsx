@@ -2,15 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
-import { MAPBOX_TOKEN, TORONTO_BBOX, TORONTO_CENTER } from "@/lib/mapbox";
+import { MAPBOX_TOKEN, TORONTO_BBOX, TORONTO_CENTER, type Place } from "@/lib/mapbox";
 
 type Props = {
+  selected: Place | null;
   className?: string;
 };
 
-export default function MapView({ className }: Props) {
+export default function MapView({ selected, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -33,10 +35,23 @@ export default function MapView({ className }: Props) {
     mapRef.current = map;
 
     return () => {
+      markerRef.current = null;
       mapRef.current = null;
       map.remove();
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selected) return;
+    markerRef.current?.remove();
+    markerRef.current = new mapboxgl.Marker({ color: "#2f5d3a" })
+      .setLngLat(selected.coordinates)
+      .setPopup(new mapboxgl.Popup({ offset: 24 }).setText(selected.address || selected.name))
+      .addTo(map)
+      .togglePopup();
+    map.flyTo({ center: selected.coordinates, zoom: 15.5, pitch: 60, essential: true });
+  }, [selected]);
 
   return <div ref={containerRef} className={className} aria-label="Map of Toronto" role="region" />;
 }
