@@ -26,7 +26,7 @@ class MCPTests(unittest.TestCase):
                     result = await client.call_tool("health_check", {})
                     self.assertFalse(result.isError)
                     self.assertEqual(result.structuredContent, {
-                        "status": "ok", "service": "django", "database": "disabled"
+                        "status": "ok", "service": "django", "database": "configured"
                     })
 
 

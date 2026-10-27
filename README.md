@@ -1,6 +1,6 @@
 # MCP Canada
 
-A Next.js / React frontend and a Python / Django API. No database is configured.
+A Next.js / React frontend and a Python / Django API. SQLite persistence uses Django models and migrations.
 
 ## Requirements
 
@@ -16,6 +16,7 @@ Run these commands from the repository root. Keep each server running in its own
 ```sh
 python3 -m venv backend/.venv
 backend/.venv/bin/python -m pip install -r backend/requirements.txt
+backend/.venv/bin/python backend/manage.py migrate
 backend/.venv/bin/python backend/manage.py runserver 127.0.0.1:8000
 ```
 
@@ -75,12 +76,10 @@ export DJANGO_ALLOWED_HOSTS='your-domain.example'
 The defaults and Django development server are intended for local development.
 Configure a production ASGI/WSGI server, HTTPS, allowed hosts, and a secret before deployment.
 
-`DATABASES` is empty. Django admin, authentication, and database-backed sessions
-are not installed; there are no migrations to run. Add a database and the relevant
-Django apps when persistence is needed. API endpoints currently use Django's
-built-in `JsonResponse`; no REST framework is required for this starter.
-For future state-changing endpoints, retain CSRF protection and add an appropriate
-CSRF token flow and authentication for the chosen deployment.
+The database MVP uses Django's built-in SQLite backend. No credentials or database
+server are needed. See [database setup and imports](docs/database.md). The health
+response reports configuration, not database readiness; `manage.py migrate` must
+succeed before data queries. Existing comparison input classes remain unchanged.
 
 ## Dependency audit
 
@@ -101,7 +100,7 @@ The initial read-only tool is `health_check`. It calls the same application
 service as `GET /api/health/` and returns:
 
 ```json
-{"status": "ok", "service": "django", "database": "disabled"}
+{"status": "ok", "service": "django", "database": "configured"}
 ```
 
 It initializes Django directly, so you do not need the Django HTTP server running
@@ -133,3 +132,12 @@ backend/.venv/bin/python backend/test_mcp.py
 
 This launches the server, initializes a real MCP session, discovers its tools,
 and invokes `health_check` without a database or running HTTP server.
+
+## Imported public data
+
+The local database now includes reviewed Census/CMHC/CPI measurements, place
+locations and complete source-table staging. See [import instructions and coverage](docs/official-data-import.md)
+and [loaded data inventory](docs/data-import-status.md). To reproduce imports,
+use the pinned manifest and preparation script; local downloads and database files
+are ignored by Git. Run `backend/.venv/bin/python backend/manage.py data_inventory`
+to inspect the actual database.
