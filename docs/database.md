@@ -113,8 +113,12 @@ Authoritative starting points (download/version/coverage still require review):
 Next source-specific adapters should be built against actual downloaded files and
 verified source codes. Start with one complete Toronto boundary version and its
 matching population/income/shelter-cost release, then add other vintages, amenities,
-GTFS stops, CPI and CMHC as separate releases. This foundation has no new HTTP
-endpoint; backend feature services can use the ORM without changing current routes.
+GTFS stops, CPI and CMHC as separate releases. The read-only `GET /api/catalog/` endpoint exposes the imported source, geography,
+and indicator metadata for the frontend data browser. `GET /api/observations/`
+requires explicit `geography_id`, `indicator_id`, and `source_id` query parameters
+and returns only observations matching all three. It never substitutes another
+release or geography. These endpoints expose imported records only; they do not
+perform cross-release harmonization or compute affordability comparisons.
 
 `SourceTableRow` preserves complete source rows with a release, original locator, label,
 metadata and cells. These staging records are explicitly outside reviewed comparison
