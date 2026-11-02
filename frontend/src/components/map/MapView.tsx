@@ -30,7 +30,7 @@ export default function MapView({ selected, className }: Props) {
         [TORONTO_BBOX[2] + 0.3, TORONTO_BBOX[3] + 0.2],
       ],
     });
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right");
+    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
     mapRef.current = map;
 
