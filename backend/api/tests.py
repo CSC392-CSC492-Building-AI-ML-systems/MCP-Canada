@@ -127,3 +127,24 @@ class SourceParserTests(SimpleTestCase):
     def test_name_key_handles_punctuation_and_boundary_suffix(self):
         from scripts.prepare_official_data import name_key
         self.assertEqual(name_key('Brookhaven-Amesbury (30)'),name_key('Brookhaven-Amesbury'))
+
+
+class BoundaryTests(TestCase):
+    def setUp(self):
+        from .models import Geography, GeographySet
+        source = SourceRelease.objects.create(id='test', publisher='Synthetic fixture', title='Not real data',
+            url='https://example.org/test', licence='Test only', retrieved_at='2026-01-01T00:00:00Z',
+            sha256='a'*64, coverage='Test')
+        square = {'type': 'Polygon', 'coordinates': [[[-79.4, 43.6], [-79.3, 43.6], [-79.3, 43.7], [-79.4, 43.6]]]}
+        for set_id in ['test-140', 'test-158']:
+            GeographySet.objects.create(id=set_id, kind='neighbourhood', version='test', source=source)
+            Geography.objects.create(id=f'{set_id}-1', geography_set_id=set_id, code='1', name='Test area', geometry=square)
+        Geography.objects.create(id='test-140-2', geography_set_id='test-140', code='2', name='No shape')
+
+    def test_returns_only_requested_set_with_geometry(self):
+        data = self.client.get('/api/boundaries/', {'geography_set_id': 'test-140'}).json()
+        self.assertEqual(data['type'], 'FeatureCollection')
+        self.assertEqual([f['properties']['geography_id'] for f in data['features']], ['test-140-1'])
+
+    def test_requires_set(self):
+        self.assertEqual(self.client.get('/api/boundaries/').status_code, 400)
