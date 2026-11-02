@@ -24,23 +24,75 @@ backend/.venv/bin/python backend/manage.py runserver 127.0.0.1:8000
 
 ```sh
 cd frontend
+cp .env.local.example .env.local   # then add your Mapbox token, see below
 npm ci
 npm run dev
 ```
 
 Open http://localhost:3000. The starter page checks the Django connection.
 The API is available directly at http://127.0.0.1:8000/api/health/.
+The map explorer is at http://localhost:3000/explore.
+
+### Frontend environment variables
+
+Next.js reads `frontend/.env.local`. This file is ignored by Git, so each developer
+creates their own copy from `frontend/.env.local.example`. Restart `npm run dev`
+after you change it.
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | For `/explore` | none | Public Mapbox token for the map and location search |
+| `BACKEND_URL` | No | `http://127.0.0.1:8000` | Django address that Next.js forwards `/api/*` requests to |
 
 Next.js forwards `/api/*` requests to Django, so browser requests stay on the
-same origin and do not need CORS configuration. To change the backend address,
-copy `frontend/.env.local.example` to `frontend/.env.local`, edit `BACKEND_URL`,
-and restart Next.js. The default works without an environment file.
+same origin and do not need CORS configuration. Change `BACKEND_URL` only if
+Django runs at a different address.
+
+### Mapbox token
+
+The `/explore` page uses [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) for
+the map and the [Search Box API](https://docs.mapbox.com/api/search/search-box/)
+for location search. Without a token, `/explore` shows a setup message; the other pages
+still work.
+
+1. Sign in or create a free account at https://account.mapbox.com/.
+2. Open **Tokens** (https://account.mapbox.com/access-tokens/) and choose **Create a token**.
+3. Name it, for example `mcp-canada-local`. Leave the default public scopes selected.
+   Don't add secret scopes. The token must start with `pk.`.
+4. Under **URL restrictions**, add `http://localhost:3000`. Add any deployed URLs as well.
+   Then a copied token works only on those sites.
+5. Create the token, copy it, and paste it into `frontend/.env.local`:
+
+   ```sh
+   NEXT_PUBLIC_MAPBOX_TOKEN=pk.your-token-here
+   ```
+
+6. Restart `npm run dev` and open http://localhost:3000/explore. You should see a map
+   of Toronto with a search box.
+
+The `NEXT_PUBLIC_` prefix means Next.js puts the value in the browser bundle at build
+time. Use a public `pk.` token only. Never use a secret `sk.` token. If you change the
+token, restart the dev server, or run `npm run build` again for production. Each
+search session is billed against the token owner's
+[free tier](https://www.mapbox.com/pricing). Use your own token and don't commit it.
+
+**Troubleshooting**
+
+- *"Add NEXT_PUBLIC_MAPBOX_TOKEN…" message*: The variable is missing, or the dev
+  server was not restarted. Check that the file is `frontend/.env.local`, not the
+  repository root.
+- *Blank map or 401/403 errors in the browser console*: The token is wrong, was
+  revoked, or its URL restrictions don't include the address in your browser.
+  `localhost` and `127.0.0.1` count as different URLs.
 
 ## Structure
 
 ```text
 frontend/
   src/app/          React pages, layout, and CSS (Next.js App Router / TypeScript)
+  src/components/   Shared React components (explorer, home, map)
+  src/lib/          Client helpers, including Mapbox config and search
+  .env.local.example  Template for frontend/.env.local
   next.config.ts    API proxy
 backend/
   config/           Django settings, URLs, ASGI / WSGI entry points
