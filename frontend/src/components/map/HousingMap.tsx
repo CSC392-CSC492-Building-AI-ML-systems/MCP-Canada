@@ -9,8 +9,12 @@ import { MAPBOX_TOKEN, type Place } from "@/lib/mapbox";
 import styles from "./HousingMap.module.css";
 
 /** Map and location search for the housing explorer's map slot. Outlines the
- * active boundary set and highlights the selected neighbourhood. */
-export default function HousingMap({ selection }: { selection: ExplorationSelection }) {
+ * active boundary set and highlights the selected neighbourhood;
+ * clicking a neighbourhood selects it. */
+export default function HousingMap({ selection, onSelectionChange }: {
+  selection: ExplorationSelection;
+  onSelectionChange: (selection: ExplorationSelection) => void;
+}) {
   const [selected, setSelected] = useState<Place | null>(null);
   const [loaded, setLoaded] = useState<{ setId: string; data: Boundaries } | null>(null);
   // Ignore outlines from a previous boundary set while the new one loads.
@@ -33,7 +37,8 @@ export default function HousingMap({ selection }: { selection: ExplorationSelect
   }
 
   return <>
-    <MapView selected={selected} boundaries={boundaries} selectedGeographyId={selection.geographyId} className={styles.map} />
+    <MapView selected={selected} boundaries={boundaries} selectedGeographyId={selection.geographyId}
+      onGeographyClick={(geographyId) => onSelectionChange({ ...selection, geographyId })} className={styles.map} />
     <div className={styles.search}>
       <LocationSearch onSelect={setSelected} />
     </div>
