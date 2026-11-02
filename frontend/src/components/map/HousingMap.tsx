@@ -4,18 +4,19 @@ import { useEffect, useState } from "react";
 import LocationSearch from "./LocationSearch";
 import MapView from "./MapView";
 import type { ExplorationSelection } from "@/components/explorer/types";
-import { loadBoundaries, type Boundaries } from "@/lib/boundaries";
+import { findBoundary, loadBoundaries, type Boundaries } from "@/lib/boundaries";
 import { MAPBOX_TOKEN, type Place } from "@/lib/mapbox";
 import styles from "./HousingMap.module.css";
 
 /** Map and location search for the housing explorer's map slot. Outlines the
  * active boundary set and highlights the selected neighbourhood;
- * clicking a neighbourhood selects it. */
+ * clicking a neighbourhood, or searching an address inside one, selects it. */
 export default function HousingMap({ selection, onSelectionChange }: {
   selection: ExplorationSelection;
   onSelectionChange: (selection: ExplorationSelection) => void;
 }) {
   const [selected, setSelected] = useState<Place | null>(null);
+  const [notice, setNotice] = useState("");
   const [loaded, setLoaded] = useState<{ setId: string; data: Boundaries } | null>(null);
   // Ignore outlines from a previous boundary set while the new one loads.
   const boundaries = loaded?.setId === selection.boundarySetId ? loaded.data : null;
@@ -30,6 +31,14 @@ export default function HousingMap({ selection, onSelectionChange }: {
     return () => abort.abort();
   }, [selection.boundarySetId]);
 
+  function onPlace(place: Place) {
+    setSelected(place);
+    // Only the active boundary set is searched; a point is never mapped to another set.
+    const match = boundaries && findBoundary(boundaries, place.coordinates);
+    setNotice(match ? "" : "This location is outside the loaded neighbourhood boundaries, so the selection did not change.");
+    if (match) onSelectionChange({ ...selection, geographyId: match.properties.geography_id });
+  }
+
   if (!MAPBOX_TOKEN) {
     return <p className={styles.missingToken} role="alert">
       Add <code>NEXT_PUBLIC_MAPBOX_TOKEN</code> to <code>frontend/.env.local</code> and restart <code>npm run dev</code> to show the map.
@@ -40,7 +49,8 @@ export default function HousingMap({ selection, onSelectionChange }: {
     <MapView selected={selected} boundaries={boundaries} selectedGeographyId={selection.geographyId}
       onGeographyClick={(geographyId) => onSelectionChange({ ...selection, geographyId })} className={styles.map} />
     <div className={styles.search}>
-      <LocationSearch onSelect={setSelected} />
+      <LocationSearch onSelect={onPlace} />
+      {notice && <p className={styles.notice} role="status">{notice}</p>}
     </div>
   </>;
 }

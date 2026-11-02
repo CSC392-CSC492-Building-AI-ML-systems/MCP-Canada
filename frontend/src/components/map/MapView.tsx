@@ -1,3 +1,7 @@
+/// <reference types="geojson" />
+// mapbox-gl's feature types use the global GeoJSON namespace without importing it.
+// TypeScript 6 no longer loads @types packages automatically, so the reference above
+// requests it. It must stay above "use client" to count.
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -67,8 +71,17 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
         clickedIdRef.current = id;
         clickRef.current?.(id);
       });
-      map.on("mouseenter", "neighbourhood-hit", () => { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", "neighbourhood-hit", () => { map.getCanvas().style.cursor = ""; });
+      const hoverLabel = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
+      map.on("mousemove", "neighbourhood-hit", (e) => {
+        const name = e.features?.[0]?.properties?.name;
+        if (typeof name !== "string") return;
+        map.getCanvas().style.cursor = "pointer";
+        hoverLabel.setLngLat(e.lngLat).setText(name).addTo(map);
+      });
+      map.on("mouseleave", "neighbourhood-hit", () => {
+        map.getCanvas().style.cursor = "";
+        hoverLabel.remove();
+      });
       setReady(true);
     });
 
