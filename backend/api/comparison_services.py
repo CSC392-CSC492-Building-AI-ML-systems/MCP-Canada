@@ -209,3 +209,33 @@ class Learning:
 
     def set_additional_notes(self, notes):
         self.additional_notes = notes
+
+class NeighbourhoodComparison:
+    """Manages neighbourhoods selected for comparison."""
+
+    MAX_NEIGHBOURHOODS = 5
+    MIN_NEIGHBOURHOODS = 3
+
+    def __init__(self):
+        self.neighbourhoods = []
+
+    def add_neighbourhood(self, neighbourhood_id):
+
+        if neighbourhood_id in self.neighbourhoods:
+            return
+
+        if len(self.neighbourhoods) >= self.MAX_NEIGHBOURHOODS:
+            raise ValueError("Maximum of 5 neighbourhoods allowed.")
+
+        self.neighbourhoods.append(neighbourhood_id)
+
+    def remove_neighbourhood(self, neighbourhood_id):
+
+        if neighbourhood_id in self.neighbourhoods:
+            self.neighbourhoods.remove(neighbourhood_id)
+
+    def get_neighbourhoods(self):
+        return self.neighbourhoods.copy()
+
+    def can_compare(self):
+        return len(self.neighbourhoods) >= self.MIN_NEIGHBOURHOODS
