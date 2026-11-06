@@ -1,0 +1,107 @@
+{
+  "boundaries-140.geojson": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/fc443770-ef0a-4025-9c2c-2cb558bfab00/resource/9994da8e-5d35-438b-bfc4-eef14d09e035/download/neighbourhoods-historical-140-4326.geojson",
+    "retrieved_at": "2026-10-27T19:26:30.656026+00:00",
+    "sha256": "7a913944c4bfacc0d454e1f737bc6805af573573bf7227805362bb8893dae5e7"
+  },
+  "boundaries-158.geojson": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/fc443770-ef0a-4025-9c2c-2cb558bfab00/resource/0719053b-28b7-48ea-b863-068823a93aaa/download/neighbourhoods-4326.geojson",
+    "retrieved_at": "2026-10-27T19:26:33.292103+00:00",
+    "sha256": "b0cb58077f5b3a47e0e56a68913c6980cfaf39d37d7d020fd91b60650c480233"
+  },
+  "census-2001.csv": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/6e19a90f-971c-46b3-852c-0c48c436d1fc/resource/3e7072b4-76f4-4ac6-92d4-0e58b1560986/download/neighbourhood-profiles-2001-140-model.csv",
+    "retrieved_at": "2026-10-27T19:22:36.073026+00:00",
+    "sha256": "8d3542c5b05988de894e171a60a5f0808ce6b916170524df7cb715a1c78a4c3d"
+  },
+  "census-2006.csv": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/6e19a90f-971c-46b3-852c-0c48c436d1fc/resource/dece8848-9529-4c36-8344-2d47fa152e79/download/neighbourhood-profiles-2006-140-model.csv",
+    "retrieved_at": "2026-10-27T19:21:22.608329+00:00",
+    "sha256": "f5eaa4478ef11afc37cad518fda484f8fc717d435b0c11fb9d3da6f0b43d6a56"
+  },
+  "census-2011.csv": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/6e19a90f-971c-46b3-852c-0c48c436d1fc/resource/9d2474eb-46ed-4970-9a38-b635703ed5c6/download/neighbourhood-profiles-2011-140-model.csv",
+    "retrieved_at": "2026-10-27T19:20:41.715318+00:00",
+    "sha256": "2fc83b4b8ee642617aff2fdfa23f5a4148e33d1622b9ef73610d625446dc2007"
+  },
+  "census-2016.csv": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/6e19a90f-971c-46b3-852c-0c48c436d1fc/resource/f07fe8f0-fa24-4d68-8cb4-326e280b0b05/download/neighbourhood-profiles-2016-140-model.csv",
+    "retrieved_at": "2026-10-27T19:21:11.061195+00:00",
+    "sha256": "9d45a882dd62bb4013423a1c41dc8ee08741d3848bf933dc68f0551e6cfffc22"
+  },
+  "census-2021.xlsx": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/6e19a90f-971c-46b3-852c-0c48c436d1fc/resource/19d4a806-7385-4889-acf2-256f1e079060/download/nbhd_2021_census_profile_full_158model.xlsx",
+    "retrieved_at": "2026-10-27T19:20:41.247461+00:00",
+    "sha256": "9a3c372907e9de09407d847398703146a9cfc0f5b2217446fd61ab8ab35345eb"
+  },
+  "cmhc-canada-2025.xlsx": {
+    "url": "https://assets.cmhc-schl.gc.ca/sites/cmhc/professional/housing-markets-data-and-research/housing-data-tables/rental-market/rental-market-report-data-tables/2025/rmr-canada-2025-en.xlsx?rev=11bbba5e-64a5-4dcd-a81f-7252c2b12537",
+    "retrieved_at": "2026-10-27T19:26:21.739204+00:00",
+    "sha256": "ac2f4157917a6efed405f6da67751ef3c32d378f27fdff602f99a12d84d813ea"
+  },
+  "cmhc-toronto-2019.xlsx": {
+    "url": "https://assets.cmhc-schl.gc.ca/sites/cmhc/data-research/data-tables/rental-market-data/rmr-data-tables/2019/rmr-toronto-2019-en.xlsx?rev=740453f3-7c14-484e-b1bf-bed5ed23b631",
+    "retrieved_at": "2026-10-27T19:35:11.944527+00:00",
+    "sha256": "d80977a57c6d3e32b0807ce0023c907601283999535119d4f5f67f6eda6279f1"
+  },
+  "cmhc-toronto-2020.xlsx": {
+    "url": "https://assets.cmhc-schl.gc.ca/sites/cmhc/data-research/data-tables/rental-market-data/rmr-data-tables/2020/rmr-toronto-2020-en.xlsx?rev=e50ea9ea-6e04-4818-96db-66faaa96207f",
+    "retrieved_at": "2026-10-27T19:35:19.795617+00:00",
+    "sha256": "471908586ad1b8d8f04b578a4031133b63a1ba3e79852764d09885ab8340444d"
+  },
+  "cmhc-toronto-2021.xlsx": {
+    "url": "https://assets.cmhc-schl.gc.ca/sites/cmhc/professional/housing-markets-data-and-research/housing-data-tables/rental-market/rental-market-report-data-tables/2021/rmr-toronto-2021-en.xlsx?rev=c20fb87f-90ed-49b0-b91e-60aa14f53f25",
+    "retrieved_at": "2026-10-27T19:35:11.966086+00:00",
+    "sha256": "17ceaf11ed8055097c678aebae56bdf77b1ead9635e8156725c1322245c10984"
+  },
+  "cmhc-toronto-2022.xlsx": {
+    "url": "https://assets.cmhc-schl.gc.ca/sites/cmhc/professional/housing-markets-data-and-research/housing-data-tables/rental-market/rental-market-report-data-tables/2022/rmr-toronto-2022-en.xlsx?rev=1f971711-7c97-4e30-a7f0-76105c1b06b5",
+    "retrieved_at": "2026-10-27T19:35:11.976070+00:00",
+    "sha256": "e0427ad7f46be7c6a19afc4c51d59a12de55665b252d35938cc5caf27134404b"
+  },
+  "cmhc-toronto-2023.xlsx": {
+    "url": "https://assets.cmhc-schl.gc.ca/sites/cmhc/professional/housing-markets-data-and-research/housing-data-tables/rental-market/rental-market-report-data-tables/2023/rmr-toronto-2023-en.xlsx?rev=e162ae8a-6793-4f7c-9ff3-1d4a1f925db4",
+    "retrieved_at": "2026-10-27T19:35:11.949244+00:00",
+    "sha256": "e297f152aecfdf88179da87214dc91da6f282a7db45ec2a95c2997ab22de9150"
+  },
+  "cmhc-toronto-2024.xlsx": {
+    "url": "https://assets.cmhc-schl.gc.ca/sites/cmhc/professional/housing-markets-data-and-research/housing-data-tables/rental-market/rental-market-report-data-tables/2024/rmr-toronto-2024-en.xlsx?rev=ef8db245-05dd-422a-9c18-e3ed9c5cb31f",
+    "retrieved_at": "2026-10-27T19:35:18.240884+00:00",
+    "sha256": "fbe9ec743cf2e6e68b09b448f6218d23767cc4e3274dfa0b23b18e986c0df476"
+  },
+  "cmhc-toronto-2025.xlsx": {
+    "url": "https://assets.cmhc-schl.gc.ca/sites/cmhc/professional/housing-markets-data-and-research/housing-data-tables/rental-market/rental-market-report-data-tables/2025/rmr-toronto-2025-en.xlsx?rev=f107330e-4620-4462-9027-8c6ff1522f1a",
+    "retrieved_at": "2026-10-27T19:35:12.463806+00:00",
+    "sha256": "99ad5966bead408ce75761a8a9540d2748cd28deb764a42d16ffde32facf9f6d"
+  },
+  "cpi.json": {
+    "url": "https://www.bankofcanada.ca/valet/observations/V41690973/json?start_date=2000-01-01",
+    "retrieved_at": "2026-10-27T19:21:46.710135+00:00",
+    "sha256": "4f9ac5e9f9feced002cca20b20a9c4a150355a9c7940e43002d60df41d917d83"
+  },
+  "libraries.geojson": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/f5aa9b07-da35-45e6-b31f-d6790eb9bd9b/resource/5f4950b4-c727-4e54-8d0d-972e198268d6/download/tpl-branch-general-information-4326.geojson",
+    "retrieved_at": "2026-10-27T19:28:28.610060+00:00",
+    "sha256": "bf5c14e309e58fc5df1ae4fca03d180f886a502e23c5de6dac5b6b8c942e0789"
+  },
+  "osm-groceries.json": {
+    "url": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A45%5D%3Bnwr%5B%22shop%22~%22%5E%28supermarket%7Cconvenience%7Cgreengrocer%29%24%22%5D%2843.58%2C-79.65%2C43.86%2C-79.11%29%3Bout+center+tags%3B",
+    "retrieved_at": "2026-10-27T19:43:16.932399+00:00",
+    "sha256": "cc13f881303310e8d2e58d85fb8f90107992b24fc9cdec67fa47f6c910b1e7e4"
+  },
+  "parks.zip": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/2aac8903-23ff-4072-ab72-b76cac44ad89/resource/9f53c253-a47e-497f-8a07-528f7d7aad90/download/parks-wgs84.zip",
+    "retrieved_at": "2026-10-27T19:25:21.513343+00:00",
+    "sha256": "a7625b8d231a5eb82add857f99163496e469221f166e99390722122981a98579"
+  },
+  "schools.csv": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/1a714b5c-64c0-4cdf-9739-0086f80fb3ee/resource/f2c12e37-f533-4ecd-ac93-3166022fadec/download/school-locations-all-types-data-4326.csv",
+    "retrieved_at": "2026-10-27T19:34:20.553102+00:00",
+    "sha256": "9354e4640e489deb357a432777683090c8cee65911616cb44922ecda8398a3a1"
+  },
+  "ttc-merged.zip": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/b811ead4-6eaf-4adb-8408-d389fb5a069c/resource/c920e221-7a1c-488b-8c5b-6d8cd4e85eaf/download/completegtfs.zip",
+    "retrieved_at": "2026-10-27T19:38:15.533311+00:00",
+    "sha256": "5e0191d59cb991b6c88ba9c1a5f2ca93a5a064a4d258dbc7ba93801d15f3dfca"
+  }
+}

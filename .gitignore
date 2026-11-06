@@ -10,3 +10,10 @@ __pycache__/
 !.env.local.example
 .DS_Store
 *.tsbuildinfo
+
+# Local databases and source downloads
+*.sqlite3
+*.sqlite3-*
+data/raw/
+
+data/normalized/
