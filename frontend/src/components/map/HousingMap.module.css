@@ -17,6 +17,13 @@
 .notice { margin: 0; padding: 8px 12px; font-size: 12px; line-height: 1.5; color: #5d4a2e; background: #fbfbf9; border: 1px solid #d8d2c2; border-radius: 8px; }
 .disclosure { position: absolute; right: 24px; bottom: 36px; z-index: 2; margin: 0; padding: 7px 14px; background: #fbfbf9; border-radius: 10px; font-size: 10px; color: #636659; }
 .missingToken { position: absolute; inset: 0; display: grid; place-content: center; padding: 32px; text-align: center; }
+.legend { pointer-events: auto; padding: 10px 14px; background: #fbfbf9; border: 1px solid #cccfc4; border-radius: 12px; font-size: 11px; color: #61665e; }
+.stage .legend h2 { margin: 0 0 6px; font-size: 12px; font-weight: 700; color: #1a1f1c; }
+.legend ul { display: grid; gap: 3px; margin: 0 0 6px; padding: 0; list-style: none; }
+.legend li { display: flex; align-items: center; gap: 8px; }
+.legend li span { width: 14px; height: 10px; border-radius: 2px; }
+.legend p { margin: 0; line-height: 1.45; }
+.legend .legendNote { margin-bottom: 4px; color: #1a1f1c; font-weight: 600; }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (hover: hover) { .chips button:not([aria-disabled="true"]):hover { background: #e6ecdd; } }
 @media (pointer: coarse) { .chips button { min-height: 44px; } }

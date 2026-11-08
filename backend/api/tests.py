@@ -148,3 +148,34 @@ class BoundaryTests(TestCase):
 
     def test_requires_set(self):
         self.assertEqual(self.client.get('/api/boundaries/').status_code, 400)
+
+
+class ObservationQueryTests(TestCase):
+    def setUp(self):
+        from .models import Geography, GeographySet, Indicator
+        source = SourceRelease.objects.create(id='test', publisher='Synthetic fixture', title='Not real data',
+            url='https://example.org/test', licence='Test only', retrieved_at='2026-01-01T00:00:00Z',
+            sha256='a'*64, coverage='Test')
+        indicator = Indicator.objects.create(id='rent', label='Test rent', unit='CAD', definition='Synthetic',
+            universe='Test', statistic='median')
+        for set_id in ['test-140', 'test-158']:
+            GeographySet.objects.create(id=set_id, kind='neighbourhood', version='test', source=source)
+            for code in ['1', '2']:
+                geography = Geography.objects.create(id=f'{set_id}-{code}', geography_set_id=set_id, code=code, name='Test')
+                Observation.objects.create(source=source, geography=geography, indicator=indicator, census_year=2021,
+                    reference_year=2021, period='annual', value=code, status='observed', source_locator='fixture')
+
+    def get(self, **params):
+        return self.client.get('/api/observations/', {'indicator_id': 'rent', 'source_id': 'test', **params})
+
+    def test_single_geography_unchanged(self):
+        rows = self.get(geography_id='test-140-1').json()['observations']
+        self.assertEqual([(r['geography_id'], r['value']) for r in rows], [('test-140-1', '1.00000000')])
+
+    def test_whole_set_stays_within_that_set(self):
+        rows = self.get(geography_set_id='test-158').json()['observations']
+        self.assertEqual([r['geography_id'] for r in rows], ['test-158-1', 'test-158-2'])
+
+    def test_requires_exactly_one_geography_filter(self):
+        self.assertEqual(self.get().status_code, 400)
+        self.assertEqual(self.get(geography_id='test-140-1', geography_set_id='test-140').status_code, 400)

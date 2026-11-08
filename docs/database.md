@@ -115,9 +115,10 @@ verified source codes. Start with one complete Toronto boundary version and its
 matching population/income/shelter-cost release, then add other vintages, amenities,
 GTFS stops, CPI and CMHC as separate releases. The read-only `GET /api/catalog/` endpoint exposes the imported source, geography,
 and indicator metadata for the frontend data browser. `GET /api/observations/`
-requires explicit `geography_id`, `indicator_id`, and `source_id` query parameters
-and returns only observations matching all three. It never substitutes another
-release or geography. These endpoints expose imported records only; they do not
+requires explicit `indicator_id` and `source_id` query parameters, plus exactly one
+of `geography_id` (one geography) or `geography_set_id` (every geography in that
+set, e.g. to shade a map). Each row includes its `geography_id`. It never
+substitutes another release, geography or boundary set. These endpoints expose imported records only; they do not
 perform cross-release harmonization or compute affordability comparisons.
 
 `SourceTableRow` preserves complete source rows with a release, original locator, label,
