@@ -80,7 +80,6 @@ export default function Home() {
   const [sourceId, setSourceId] = useState("");
   const [annualIncome, setAnnualIncome] = useState("");
   const [monthlyRentBudget, setMonthlyRentBudget] = useState("");
-  const [bedrooms, setBedrooms] = useState("1");
   const [observationResult, setObservationResult] =
     useState<ObservationResult | null>(null);
   const [observationError, setObservationError] =
@@ -291,19 +290,6 @@ export default function Home() {
                     <span className="input-suffix">CAD / month</span>
                   </span>
                 </label>
-                <label>
-                  Bedrooms
-                  <select
-                    value={bedrooms}
-                    onChange={(event) => setBedrooms(event.target.value)}
-                  >
-                    <option value="0">Studio</option>
-                    <option value="1">1 bedroom</option>
-                    <option value="2">2 bedrooms</option>
-                    <option value="3">3 bedrooms</option>
-                    <option value="4">4+ bedrooms</option>
-                  </select>
-                </label>
               </div>
               <aside className="estimate-card" aria-live="polite">
                 <span className="estimate-icon" aria-hidden="true">↗</span>
@@ -348,10 +334,6 @@ export default function Home() {
                     }).format(monthlyBudgetValue)}</strong>
                   </div>
                 )}
-                <p className="estimate-footnote">
-                  {bedrooms === "0" ? "Studio selected" : `${bedrooms}${bedrooms === "4" ? "+" : ""} bedroom${bedrooms === "1" ? "" : "s"} selected`}
-                  {" · "}Bedrooms may not be available in historical records.
-                </p>
               </aside>
             </div>
           </section>
