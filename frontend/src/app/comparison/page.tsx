@@ -69,7 +69,6 @@ const yearConfigs: Record<string, {
     ],
   },
 };
-const sourceId = "census-2021-xlsx-9a3c372907";
 
 type ComparisonResponse = {
   geographies: {
@@ -93,35 +92,6 @@ type ComparisonResponse = {
     status: string;
   }[];
 };
-
-const rows = [
-  {
-    label: "Median after-tax household income (2020)",
-    indicatorId: "census-2021-row-247",
-    unit: "CAD/year",
-  },
-  {
-    label: "Median monthly shelter costs (2021)",
-    indicatorId: "census-2021-row-380",
-    unit: "CAD/month",
-  },
-  {
-    label: "Average monthly shelter costs (2021)",
-    indicatorId: "census-2021-row-381",
-    unit: "CAD/month",
-  },
-  {
-    label: "Tenant households spending 30%+ on shelter",
-    indicatorId: "census-2021-row-378",
-    unit: "percent",
-  },
-  {
-    label: "Median age (2021)",
-    indicatorId: "census-2021-row-36",
-    unit: "years",
-  },
-] as const;
-
 
 function MapCard({ index }: { index: number }) {
   return (
@@ -420,7 +390,7 @@ export default function ComparisonPage() {
           <h2>Local history in context</h2>
 
           <p>
-            Compare how each neighbourhood's past shaped today's housing,
+            Compare how each neighbourhood&apos;s past shaped today&apos;s housing,
             transport and community spaces. Historical context stays
             separate from the present-day match score.
           </p>
