@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   defaultHousingSelection,
   indicatorsForGeography,
@@ -11,6 +11,7 @@ import {
   type Catalog,
   type DataTopic,
 } from "./selection";
+import { calculateMonthlyRentBudget } from "./budget";
 
 type Observation = {
   census_year: number | null;
@@ -79,7 +80,7 @@ export default function Home() {
   const [indicatorId, setIndicatorId] = useState("");
   const [sourceId, setSourceId] = useState("");
   const [annualIncome, setAnnualIncome] = useState("");
-  const [monthlyRentBudget, setMonthlyRentBudget] = useState("");
+  const [rentSharePercent, setRentSharePercent] = useState("30");
   const [observationResult, setObservationResult] =
     useState<ObservationResult | null>(null);
   const [observationError, setObservationError] =
@@ -175,11 +176,16 @@ export default function Home() {
     (source) => source.id === sourceId,
   );
 
-  const annualIncomeValue = Number(annualIncome);
-  const monthlyBudgetValue = Number(monthlyRentBudget);
-  const hasIncome = annualIncome !== "" && annualIncomeValue > 0;
-  const hasBudget = monthlyRentBudget !== "" && monthlyBudgetValue >= 0;
-  const suggestedRentLimit = hasIncome ? (annualIncomeValue / 12) * 0.3 : null;
+  const rentShareValue = Number(rentSharePercent);
+  const hasValidRentShare =
+    rentSharePercent.trim() !== "" &&
+    Number.isFinite(rentShareValue) &&
+    rentShareValue >= 0 &&
+    rentShareValue <= 100;
+  const monthlyRentBudget = calculateMonthlyRentBudget(
+    annualIncome,
+    rentSharePercent,
+  );
 
   const chartRows = (observations ?? []).filter(
     (row) => row.status === "observed" && row.value !== null,
@@ -253,7 +259,7 @@ export default function Home() {
                 <p className="section-kicker">01 <span /> YOUR STARTING POINT</p>
                 <h2 id="budget-heading">What feels comfortable?</h2>
                 <p className="section-description">
-                  Add a few details to get a simple monthly rent estimate.
+                  Choose your household income and the share you want to spend on rent.
                 </p>
               </div>
               <span className="section-stamp">YOUR<br />BUDGET</span>
@@ -261,78 +267,109 @@ export default function Home() {
             <div className="budget-layout">
               <div className="budget-fields">
                 <label>
-                  Annual household income <span className="label-note">OPTIONAL · BEFORE TAX</span>
+                  <span className="budget-field-heading">
+                    Annual household income (before tax)
+                  </span>
+                  <span className="budget-field-hint">
+                    Before-tax household income for one year.
+                  </span>
                   <span className="input-with-prefix">
                     <span aria-hidden="true">$</span>
                     <input
                       type="number"
-                      min="0"
+                      min="1"
                       inputMode="decimal"
-                      placeholder="68,000"
+                      placeholder="e.g. 68,000"
                       value={annualIncome}
+                      aria-label="Annual household income before tax in Canadian dollars"
                       onChange={(event) => setAnnualIncome(event.target.value)}
                     />
                     <span className="input-suffix">CAD / year</span>
                   </span>
                 </label>
                 <label>
-                  Monthly rent budget
-                  <span className="input-with-prefix">
-                    <span aria-hidden="true">$</span>
+                  <span className="budget-field-heading">Share of income for rent</span>
+                  <span className="budget-field-hint">
+                    Drag to choose a share from 0% to 100%.
+                  </span>
+                  <span className="rent-share-control">
                     <input
-                      type="number"
+                      className="rent-share-slider"
+                      type="range"
                       min="0"
-                      inputMode="decimal"
-                      placeholder="2,200"
-                      value={monthlyRentBudget}
-                      onChange={(event) => setMonthlyRentBudget(event.target.value)}
+                      max="100"
+                      step="1"
+                      aria-label="Share of annual household income to budget for rent"
+                      aria-valuetext={`${rentSharePercent}%`}
+                      aria-describedby="rent-share-range"
+                      value={rentSharePercent}
+                      style={{
+                        "--range-progress": `${rentShareValue}%`,
+                      } as CSSProperties}
+                      onChange={(event) => setRentSharePercent(event.target.value)}
                     />
-                    <span className="input-suffix">CAD / month</span>
+                    <output className="rent-share-value" aria-live="polite">
+                      {rentSharePercent}%
+                    </output>
+                  </span>
+                  <span className="range-hint" id="rent-share-range">
+                    <span>0%</span><span>100%</span>
                   </span>
                 </label>
               </div>
               <aside className="estimate-card" aria-live="polite">
                 <span className="estimate-icon" aria-hidden="true">↗</span>
-                <p className="estimate-label">A QUICK GUIDELINE</p>
-                {hasIncome && suggestedRentLimit !== null && (
+                <p className="estimate-label">YOUR ESTIMATED MONTHLY RENT BUDGET</p>
+                {monthlyRentBudget !== null && (
                   <>
-                    <p className="estimate-value">
+                    <output className="estimate-value" aria-label="Estimated monthly rent budget">
                       {new Intl.NumberFormat("en-CA", {
                         style: "currency",
                         currency: "CAD",
                         maximumFractionDigits: 0,
-                      }).format(suggestedRentLimit)}
-                      <span>/ month</span>
-                    </p>
+                      }).format(monthlyRentBudget)}
+                      <span>monthly</span>
+                    </output>
                     <p className="estimate-copy">
-                      About 30% of your gross income. A common rule of thumb,
-                      not a final affordability decision.
+                      Your rent budget based on the income and share you chose.
                     </p>
                   </>
                 )}
-                {!hasIncome && (
+                {monthlyRentBudget === null && (
                   <>
-                    <p className="estimate-value estimate-placeholder">Your number, your starting point</p>
+                    <p className="estimate-value estimate-placeholder">
+                      {annualIncome.trim() === ""
+                        ? "Your estimate will appear here"
+                        : "Check your entries"}
+                    </p>
                     <p className="estimate-copy">
-                      Add an income above to see a rough monthly guideline.
+                      {hasValidRentShare
+                        ? "Add your annual household income to see your monthly rent budget."
+                        : "Enter a rent share from 0% to 100% and a positive annual income."}
                     </p>
                   </>
                 )}
-                {hasBudget && hasIncome && (
-                  <div className="budget-share">
-                    <span>Your budget uses</span>
-                    <strong>{((monthlyBudgetValue * 12 / annualIncomeValue) * 100).toFixed(1)}% of gross income</strong>
-                  </div>
-                )}
-                {hasBudget && !hasIncome && (
-                  <div className="budget-share">
-                    <span>Your monthly rent budget</span>
-                    <strong>{new Intl.NumberFormat("en-CA", {
-                      style: "currency",
-                      currency: "CAD",
-                      maximumFractionDigits: 0,
-                    }).format(monthlyBudgetValue)}</strong>
-                  </div>
+                <p className="estimate-footnote">
+                  Planning estimate based on before-tax income—not a rent quote or an affordability decision.
+                </p>
+                {monthlyRentBudget !== null && (
+                  <details className="calculation-details">
+                    <summary>Show calculation</summary>
+                    <p>
+                      {new Intl.NumberFormat("en-CA", {
+                        style: "currency",
+                        currency: "CAD",
+                        maximumFractionDigits: 0,
+                      }).format(Number(annualIncome))}{" "}
+                      × {rentSharePercent}% ÷ 12 months ={" "}
+                      {new Intl.NumberFormat("en-CA", {
+                        style: "currency",
+                        currency: "CAD",
+                        maximumFractionDigits: 0,
+                      }).format(monthlyRentBudget)}{" "}
+                      per month.
+                    </p>
+                  </details>
                 )}
               </aside>
             </div>
