@@ -106,6 +106,7 @@ h1 { font-size: clamp(38px, 6vw, 58px); letter-spacing: -.045em; margin: 14px 0;
 .loading-state { display: flex; min-height: 150px; align-items: center; justify-content: center; gap: 12px; color: #71847b; font-size: 12px; }
 .loading-spinner { width: 23px; height: 23px; border: 2px solid #dce8e4; border-top-color: #398773; border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.empty-state { margin: 18px 0; padding: 18px; border: 1px solid #e6ebe2; border-radius: 8px; background: #f8f8f1; color: #52686b; font-size: 13px; }
 .error { margin-top: 20px; padding: 18px; border-radius: 10px; background: #fff0ed; color: #8c3026; }
 .error-text { color: #a12e24; }
 .chart { display: grid; gap: 10px; margin: 22px 0; }
