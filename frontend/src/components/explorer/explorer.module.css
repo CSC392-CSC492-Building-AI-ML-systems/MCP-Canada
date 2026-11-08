@@ -1,4 +1,4 @@
-.explorer { --paper: #fbfbf9; --ink: #1a1f1a; --muted: #636659; --green: #295738; --cream: #f5f1e3; --sage: #e6ecdd; --line: #cccfc4; color: var(--ink); background: var(--paper); font-family: "DM Sans", Arial, sans-serif; font-size: 13px; line-height: 1.45; }
+.explorer { --paper: #fbfbf9; --ink: #1a1f1a; --muted: #636659; --green: #295738; --cream: #f5f1e3; --sage: #e6ecdd; --line: #cccfc4; color: var(--ink); background: var(--paper); font-family: var(--font-dm-sans), "DM Sans", Arial, sans-serif; font-size: 13px; line-height: 1.45; }
 .explorer :where(h1,h2,h3,p) { margin: 0; letter-spacing: normal; }
 .explorer h2 { font-size: 16px; line-height: 1.45; font-weight: 700; }
 .explorer :where(button,input,select) { font: inherit; }
@@ -15,7 +15,7 @@
 .navActions a { color: var(--muted); font-size: 12px; text-underline-offset: 4px; }
 .savedCount { display: inline-grid; place-items: center; background: var(--sage); border-radius: 50%; min-width: 19px; height: 19px; margin-left: 8px; color: var(--green); }
 .workspace { display: grid; grid-template-columns: minmax(0,1fr) 380px; max-width: none; width: 100%; height: calc(100dvh - 72px); min-height: 600px; margin: 0; padding: 0; overflow: hidden; }
-.mapArea { position: relative; min-width: 0; min-height: 600px; background: #edf0e7; display: flex; flex-direction: column; }
+.mapArea { position: relative; min-width: 0; min-height: 600px; background: var(--cream); display: flex; flex-direction: column; }
 .mapTopline { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 25px 28px 15px; position: relative; z-index: 2; }
 .kicker { display: block; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
 .mapStatus { font-size: 10px; color: #6a7163; display: flex; align-items: center; gap: 6px; }
@@ -30,23 +30,33 @@
 .mapPlaceholderMark { display: grid; place-items: center; width: 65px; height: 65px; border: 1px solid #b7c0ab; color: #728368; border-radius: 50%; font-size: 33px; margin-bottom: 4px; }
 .placeholderTag { margin-top: 3px; padding: 6px 11px; border: 1px solid #d2dac7; border-radius: 99px; font-size: 10px; color: var(--green); }
 .placeholderTag span { margin-left: 10px; }
-.mapSlot { position: absolute; inset: 0; }
-.mapBottom { position: relative; z-index: 2; margin: auto 28px 24px; }
-.boundaryNote { max-width: 570px; margin: 0 0 12px !important; font-size: 10px; color: #68715e; line-height: 1.7; }
-.timeline { background: var(--paper); border: 1px solid var(--line); border-radius: 13px; padding: 18px 22px 12px; box-shadow: 0 6px 20px #29391d06; }
-.timelineHeading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
-.timelineHeading .kicker { font-size: 9px; color: var(--green); }
-.timelineHeading h2 { font-size: 14px; margin-top: 4px; }
-.yearPill { padding: 6px 12px; background: var(--sage); color: var(--green); border-radius: 7px; font-size: 15px; font-weight: 700; }
-.timelineControls { display: flex; align-items: center; gap: 18px; margin: 18px 0 10px; }
-.timelineControls > button { border: 1px solid var(--line); border-radius: 50%; background: var(--paper); width: 27px; height: 27px; color: var(--green); flex-shrink: 0; }
-.yearTrack { display: flex; justify-content: space-between; position: relative; flex: 1; gap: 8px; }
-.yearTrack::before { content:''; position: absolute; height: 1px; top: 8px; left: 17px; right: 17px; background: #c6cdbd; }
-.yearTrack button { position: relative; display: flex; align-items: center; flex-direction: column; gap: 6px; border: 0; background: var(--paper); padding: 0 8px; font-size: 11px; color: var(--muted); }
-.yearTrack button span { width: 16px; height: 16px; border: 4px solid var(--paper); background: #bbc5b0; border-radius: 50%; }
-.yearTrack .activeYear { color: var(--green); font-weight: 700; }
-.yearTrack .activeYear span { background: var(--green); box-shadow: 0 0 0 1px var(--green); }
-.timeline > p { font-size: 10px; color: var(--muted); }
+.mapSlot { position: relative; flex: 1; min-height: 360px; }
+/* Dock under the map: selected place, across-time entry and the time scrubber. */
+.mapDock { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px 24px 24px; background: var(--cream); }
+.dockRow { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.selectedCard { flex: 1; min-width: 0; max-width: 660px; min-height: 64px; display: flex; flex-direction: column; gap: 1px; padding: 7px 15px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
+.selectedCard .rustKicker { font-size: 9px; font-weight: 700; color: #ab5433; }
+.selectedCard strong { font-size: 16px; line-height: 1.3; }
+.selectedCard p { font-size: 11px; color: #61665e; }
+.acrossTime { flex-shrink: 0; width: 301px; min-height: 51px; padding: 10px; border: 1px solid var(--green); border-radius: 10px; background: var(--green); color: var(--paper); font-size: 15px; font-weight: 700; transition: background .15s ease, transform .1s ease; }
+.acrossTime:active { transform: translateY(1px); }
+@media (hover: hover) { .acrossTime:hover { background: #1f4429; } }
+.timeline { display: flex; flex-direction: column; gap: 10px; padding: 13px 16px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; }
+.timelineHeading { display: flex; align-items: center; gap: 10px; min-height: 26px; }
+.explorer .timelineLabel { font-size: 10px; font-weight: 700; color: #61665e; }
+.timelineHeading select { margin-left: 12px; min-width: 0; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 11px; }
+.timelineStatus { margin-left: auto; flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--green); }
+/* Track from the Figma spec: grey rail, rust progress up to the selected year. */
+.timelineTrack { --x: calc(6px + var(--p) * (100% - 12px)); position: relative; height: 18px; }
+.timelineTrack::before, .timelineTrack span { content: ''; position: absolute; top: 7px; left: 0; height: 4px; }
+.timelineTrack::before { right: 0; background: #d4d6c9; }
+.timelineTrack span { width: var(--x); background: #a84f2b; transition: width .2s ease; }
+.timelineTrack::after { content: ''; position: absolute; top: 2px; left: var(--x); width: 14px; height: 14px; box-sizing: border-box; transform: translateX(-50%); border: 2px solid var(--paper); border-radius: 50%; background: #a84f2b; transition: left .2s ease; }
+.timelineYears { position: relative; height: 22px; }
+.timelineYears button { position: absolute; top: 0; left: calc(20px + var(--p) * (100% - 40px)); transform: translateX(-50%); padding: 0 4px; border: 0; background: none; color: #636659; font-size: 11px; font-weight: 500; }
+.timelineYears button[aria-pressed="true"] { color: var(--green); font-weight: 700; }
+@media (hover: hover) { .timelineYears button:hover { color: var(--green); } }
+@media (pointer: coarse) { .timelineYears { height: 44px; } .timelineYears button { height: 44px; } }
 .detailsPanel { width: 380px; background: var(--paper); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .panelScroll { overflow-y: auto; overscroll-behavior: contain; flex: 1; min-height: 0; padding: 20px; display: flex; flex-direction: column; gap: 18px; scrollbar-width: thin; scrollbar-color: #bdc6b4 transparent; }
 .neighbourhoodHeading { display: flex; align-items: flex-start; gap: 10px; }
@@ -124,9 +134,6 @@
 .savedDialog li span { display: block; font-size: 10px; color: var(--muted); margin-top: 4px; }
 .savedDialog li button { background: transparent; border: 0; text-decoration: underline; font-size: 11px; color: #8c4c34; }
 @media (min-width: 1600px) { .locationControls label:last-child { max-width: 420px; } }
-@media (max-width: 1000px) { .navContext { display: none; } .mapTopline,.locationControls { margin-left: 18px; margin-right: 18px; } .mapTopline { padding: 22px 0 14px; } .mapBottom { margin-left: 18px; margin-right: 18px; } .locationControls { flex-direction: column; align-items: stretch; gap: 10px; } .locationControls label:last-child { max-width: none; } .timeline { padding: 14px; } .timelineControls { gap: 6px; } .mapStatus { display: none; } }
-@media (max-width: 720px) { .navigation { padding: 12px 16px; gap: 10px; } .navActions { gap: 10px; } .navActions a { display: none; } .workspace { display: flex; flex-direction: column; height: auto; min-height: calc(100dvh - 72px); overflow: visible; } .mapArea { min-height: 520px; } .mapMessage { min-height: 200px; padding: 24px; } .mapMessage h2 { font-size: 23px; } .mapBottom { margin-bottom: 18px; } .detailsPanel { width: 100%; border-left: 0; border-top: 1px solid var(--line); overflow: visible; } .panelScroll { overflow: visible; padding: 20px; gap: 18px; } .panelActions { position: sticky; bottom: 0; z-index: 5; } .timelineControls { gap: 12px; } }
-@media (prefers-reduced-motion: reduce) { .explorer * { scroll-behavior: auto; } }
-/* With a map mounted, overlays sit on top of it; only their controls take clicks. */
-.mapArea:has(.mapSlot) :is(.mapTopline, .locationControls, .mapBottom) { pointer-events: none; }
-.mapArea:has(.mapSlot) :is(.locationControls label, .timeline) { pointer-events: auto; }
+@media (max-width: 1000px) { .navContext { display: none; } .mapTopline,.locationControls { margin-left: 18px; margin-right: 18px; } .mapTopline { padding: 22px 0 14px; } .locationControls { flex-direction: column; align-items: stretch; gap: 10px; } .locationControls label:last-child { max-width: none; } .dockRow { flex-direction: column; align-items: stretch; } .selectedCard { max-width: none; } .acrossTime { width: auto; } .mapStatus { display: none; } }
+@media (max-width: 720px) { .navigation { padding: 12px 16px; gap: 10px; } .navActions { gap: 10px; } .navActions a { display: none; } .workspace { display: flex; flex-direction: column; height: auto; min-height: calc(100dvh - 72px); overflow: visible; } .mapArea { min-height: 520px; } .mapMessage { min-height: 200px; padding: 24px; } .mapMessage h2 { font-size: 23px; } .detailsPanel { width: 100%; border-left: 0; border-top: 1px solid var(--line); overflow: visible; } .panelScroll { overflow: visible; padding: 20px; gap: 18px; } .panelActions { position: sticky; bottom: 0; z-index: 5; } .mapDock { padding: 12px 16px 16px; } .mapSlot { min-height: 520px; flex: none; } .timelineHeading { flex-wrap: wrap; } .timelineHeading select { margin-left: 0; max-width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .explorer * { scroll-behavior: auto; } .timelineTrack span, .timelineTrack::after, .acrossTime { transition: none; } }

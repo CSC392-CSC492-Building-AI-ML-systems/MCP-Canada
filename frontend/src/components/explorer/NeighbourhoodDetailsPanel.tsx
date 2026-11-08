@@ -60,7 +60,7 @@ export function NeighbourhoodDetailsPanel({ profile, income, budget, onIncomeCha
         <p className={styles.caption}>{result.meetsGuideline === null ? 'Enter income to compare the published housing cost with the 30% guideline.' : result.meetsGuideline ? 'The selected benchmark is at or below 30% of your entered income.' : 'The selected benchmark exceeds 30% of your entered income.'} This is a budget illustration, not the published housing-burden rate above.</p>
         {costValue !== null && result.incomeShare !== null && <p className={styles.caption}>You are comparing a {profile.year} cost with the income you enter. Use a matching income period for a historical budget check.</p>}
       </section>
-      <section className={styles.panelSection}><h2>Housing through time</h2><p className={styles.caption}>Same {historical ? '140' : '158'} boundary set · no filled gaps</p>
+      <section className={styles.panelSection} aria-labelledby="history-title"><h2 id="history-title">Housing through time</h2><p className={styles.caption}>Same {historical ? '140' : '158'} boundary set · no filled gaps</p>
         <div className={styles.historyBars}>{profile.history.map(h => { const value = measuredNumber(h.cost); return <div key={h.year} aria-label={`${h.year}: ${value === null ? 'unavailable' : money(value)}`}><span>{h.year}</span><span className={styles.historyTrack}>{value !== null && <span style={{ width: `${value / historyMax * 100}%` }} />}</span><strong>{value === null ? '—' : money(value)}</strong></div>; })}</div>
         <p className={styles.caption}>Earlier records use average gross rent; 2011 and 2021 use median renter shelter costs. No change percentage is calculated across different definitions or boundaries.</p>
       </section>
