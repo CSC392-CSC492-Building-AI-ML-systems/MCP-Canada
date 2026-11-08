@@ -31,7 +31,7 @@ npm run dev
 
 Open http://localhost:3000. The starter page checks the Django connection.
 The API is available directly at http://127.0.0.1:8000/api/health/.
-The map explorer is at http://localhost:3000/explore.
+The map explorer is at http://localhost:3000/housing.
 
 ### Frontend environment variables
 
@@ -41,7 +41,7 @@ after you change it.
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | For `/explore` | none | Public Mapbox token for the map and location search |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | For the map on `/housing` | none | Public Mapbox token for the map and location search |
 | `BACKEND_URL` | No | `http://127.0.0.1:8000` | Django address that Next.js forwards `/api/*` requests to |
 
 Next.js forwards `/api/*` requests to Django, so browser requests stay on the
@@ -50,9 +50,9 @@ Django runs at a different address.
 
 ### Mapbox token
 
-The `/explore` page uses [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) for
+The `/housing` page uses [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) for
 the map and the [Search Box API](https://docs.mapbox.com/api/search/search-box/)
-for location search. Without a token, `/explore` shows a setup message; the other pages
+for location search. Without a token, the map area on `/housing` shows a setup message; the other pages
 still work.
 
 1. Sign in or create a free account at https://account.mapbox.com/.
@@ -67,7 +67,7 @@ still work.
    NEXT_PUBLIC_MAPBOX_TOKEN=pk.your-token-here
    ```
 
-6. Restart `npm run dev` and open http://localhost:3000/explore. You should see a map
+6. Restart `npm run dev` and open http://localhost:3000/housing. You should see a map
    of Toronto with a search box.
 
 The `NEXT_PUBLIC_` prefix means Next.js puts the value in the browser bundle at build
