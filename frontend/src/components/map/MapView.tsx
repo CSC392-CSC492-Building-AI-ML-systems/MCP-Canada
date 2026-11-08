@@ -19,15 +19,20 @@ type Props = {
   // Mapbox Standard basemap options, toggled by the layer chips.
   show3dObjects?: boolean;
   showTransit?: boolean;
+  // Display-only map for the landing page: no controls, panning or zooming by the user.
+  preview?: boolean;
   className?: string;
 };
 
 const SOURCE = "neighbourhoods";
 const HOME = { center: TORONTO_CENTER, zoom: 11, pitch: 45, bearing: -17 };
 const EMPTY: Boundaries = { type: "FeatureCollection", features: [] };
+// Extra top/right padding keeps the shape clear of the overlays on the map.
+const FIT = { padding: { top: 170, bottom: 60, left: 60, right: 90 }, maxZoom: 14, pitch: 45 };
+const PREVIEW_FIT = { padding: { top: 90, bottom: 50, left: 50, right: 50 }, maxZoom: 13, pitch: 50 };
 const isSelected = (id: string) => ["==", ["get", "geography_id"], id];
 
-export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, className }: Props) {
+export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, preview = false, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -50,12 +55,13 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       // Standard style includes 3D buildings and landmarks out of the box.
       style: "mapbox://styles/mapbox/standard",
       ...HOME,
+      interactive: !preview,
       maxBounds: [
         [TORONTO_BBOX[0] - 0.3, TORONTO_BBOX[1] - 0.2],
         [TORONTO_BBOX[2] + 0.3, TORONTO_BBOX[3] + 0.2],
       ],
     });
-    map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
+    if (!preview) map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
     mapRef.current = map;
     // Only the place popup has a close button. Popup "close" events can't be used:
     // they also fire when the user clicks elsewhere on the map.
@@ -103,7 +109,7 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       mapRef.current = null;
       map.remove();
     };
-  }, []);
+  }, [preview]);
 
   useEffect(() => {
     if (!ready) return;
@@ -118,9 +124,8 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     clickedIdRef.current = null;
     const feature = boundaries?.features.find((f) => f.properties.geography_id === selectedGeographyId);
     if (fromClick) return;
-    // Extra top/right padding keeps the shape clear of the overlays on the map.
-    if (feature) map.fitBounds(boundsOf(feature.geometry), { padding: { top: 170, bottom: 60, left: 60, right: 90 }, maxZoom: 14, pitch: 45 });
-  }, [ready, boundaries, selectedGeographyId]);
+    if (feature) map.fitBounds(boundsOf(feature.geometry), preview ? PREVIEW_FIT : FIT);
+  }, [ready, boundaries, selectedGeographyId, preview]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -145,11 +150,12 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
 
   return <div className={className}>
     <div ref={containerRef} className={styles.canvas} aria-label="Map of Toronto" role="region" />
-    <div className={styles.controls} role="group" aria-label="Map controls">
+    {/* The landing preview is display-only, so it has no controls. */}
+    {!preview && <div className={styles.controls} role="group" aria-label="Map controls">
       <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => mapRef.current?.zoomIn()}>+</button>
       <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => mapRef.current?.zoomOut()}>−</button>
       <button type="button" aria-label="Reset rotation" title="Reset rotation" onClick={() => mapRef.current?.easeTo({ bearing: HOME.bearing, pitch: HOME.pitch })}>↻</button>
       <button type="button" aria-label="Show all of Toronto" title="Show all of Toronto" onClick={() => mapRef.current?.flyTo({ ...HOME, essential: true })}>⌂</button>
-    </div>
+    </div>}
   </div>;
 }

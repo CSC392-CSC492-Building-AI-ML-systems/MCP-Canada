@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
@@ -8,38 +9,13 @@ import {MAPBOX_TOKEN, newSessionToken, placeHref, retrievePlace, suggestPlaces, 
 import {loadWorkspaceData} from '../explorer/data';
 import styles from './home.module.css';
 
+// Client-only and split out, so mapbox-gl isn't part of the landing page's first load.
+const LandingMapPreview=dynamic(()=>import('./LandingMapPreview'),{ssr:false,loading:()=><div className={styles.previewCard}/>});
+
 type Place = {id:string;name:string};
-const previewYears=[1850,1920,1950,1980,2026];
 const MIN_ADDRESS_QUERY=3;
 
-function CampusIllustration({zoom}:{zoom:number}) {
-  return <svg className={styles.campusArt} viewBox="0 0 720 460" role="img" aria-label="Illustrative isometric campus, not an actual geographic or historical map">
-    <defs><pattern id="campus-grid" width="38" height="38" patternUnits="userSpaceOnUse"><path d="M 38 0 L 0 0 0 38" fill="none" stroke="#c9d2bd" strokeWidth=".7"/></pattern><filter id="campus-shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="14" stdDeviation="14" floodColor="#65774c" floodOpacity=".15"/></filter></defs>
-    <g transform={`translate(360 240) scale(${zoom}) translate(-360 -240)`}>
-      <ellipse cx="364" cy="350" rx="268" ry="54" fill="#cbd5bd" opacity=".5"/>
-      <path d="M76 258 342 104 655 281 389 435Z" fill="#cbd7bc" stroke="#aaba98"/>
-      <path d="M76 244 342 90 655 267 389 421Z" fill="#dde5d0" stroke="#bccba9" filter="url(#campus-shadow)"/>
-      <path d="M76 244 342 90 655 267 389 421Z" fill="url(#campus-grid)" opacity=".5"/>
-      <path d="M146 282 405 132 437 150 178 301Z" fill="#faf9ed"/>
-      <path d="M244 151 558 328 532 343 218 166Z" fill="#faf9ed"/>
-      <path d="M287 363 536 220 550 228 301 372Z" fill="#f1efdf"/>
-      <g stroke="#788b68" strokeWidth="1">
-        <path d="M252 219 345 166 434 216 341 270Z" fill="#bdcaa9"/><path d="M252 219 341 270 341 315 252 264Z" fill="#98ad84"/><path d="M341 270 434 216 434 261 341 315Z" fill="#738f63"/>
-        <path d="M271 208 345 166 414 205 340 248Z" fill="#dce3ce"/><path d="M340 248 414 205 414 217 340 260Z" fill="#a0b48b"/>
-        <path d="M434 294 488 263 547 296 493 328Z" fill="#dbe1ca"/><path d="M434 294 493 328 493 362 434 328Z" fill="#a7b996"/><path d="M493 328 547 296 547 330 493 362Z" fill="#819b71"/>
-        <path d="M186 249 233 222 274 245 227 273Z" fill="#e7e6d2"/><path d="M186 249 227 273 227 303 186 279Z" fill="#b7c4a3"/><path d="M227 273 274 245 274 275 227 303Z" fill="#8da57b"/>
-        <path d="M386 156 430 130 475 155 431 181Z" fill="#dde1cc"/><path d="M386 156 431 181 431 213 386 188Z" fill="#a3b88e"/><path d="M431 181 475 155 475 187 431 213Z" fill="#789366"/>
-      </g>
-      <g stroke="#e5edda" strokeWidth="3" opacity=".85"><path d="M268 240 268 258 M283 248 283 266 M299 257 299 275 M315 266 315 283 M355 281 355 298 M372 271 372 288 M388 262 388 279 M405 252 405 270 M450 313 450 326 M465 322 465 335 M508 328 508 343 M525 318 525 333"/></g>
-      {[[158,228],[191,201],[221,177],[293,123],[333,345],[365,363],[586,272],[562,254],[515,214],[535,363],[384,113],[141,251]].map(([x,y],i)=><g key={i}><path d={`M${x} ${y}v22`} stroke="#71845e" strokeWidth="3"/><ellipse cx={x} cy={y} rx="13" ry="17" fill={i%3===0?'#8ca47a':'#a6bc91'} stroke="#879f73" strokeWidth=".8"/></g>)}
-      <g transform="translate(350 131)"><path d="M0 0C-15-16-25-28-25-42a25 25 0 1 1 50 0C25-28 15-16 0 0Z" fill="#295738"/><circle cy="-42" r="8" fill="#f4f4e9"/><ellipse cy="8" rx="13" ry="5" fill="#6d845c" opacity=".28"/></g>
-    </g>
-  </svg>;
-}
-
 export function HomePage() {
-  const [year,setYear]=useState(2026);
-  const [zoom,setZoom]=useState(1);
   const [query,setQuery]=useState('');
   const [places,setPlaces]=useState<Place[]>([]);
   const [searchState,setSearchState]=useState<'idle'|'loading'|'ready'|'error'>('idle');
@@ -109,8 +85,7 @@ export function HomePage() {
         </div>
         <div className={styles.searchExamples}><span>TRY A PLACE</span>{['UTM campus','Davis Building','Instructional Centre'].map(place=><button type="button" key={place} onClick={()=>{setQuery(place);void prepareSearch();}}>{place} <span aria-hidden="true">↗</span></button>)}</div>
       </div>
-      <div className={styles.previewColumn}><div className={styles.previewCard}><div className={styles.previewHeader}><div><span className={styles.previewDot}/>UTM campus, Mississauga</div><span className={styles.previewBadge}>3D preview</span></div><CampusIllustration zoom={zoom}/><span className={styles.mapLabel}>3D Map Explorer</span><div className={styles.zoomControls}><button aria-label="Zoom in on illustrative preview" disabled={zoom>=1.3} onClick={()=>setZoom(z=>Math.min(1.3,Number((z+.1).toFixed(1))))}>+</button><button aria-label="Zoom out on illustrative preview" disabled={zoom<=.8} onClick={()=>setZoom(z=>Math.max(.8,Number((z-.1).toFixed(1))))}>−</button></div><div className={styles.mapCaption}>Illustrative campus preview · not geographic or historical imagery</div></div>
-        <div className={styles.previewTimeline}><div><p className={styles.kicker}>MOVE THROUGH TIME</p><span>{year}</span></div><div className={styles.previewYears} role="group" aria-label="Illustrative timeline">{previewYears.map(y=><button key={y} aria-pressed={year===y} onClick={()=>setYear(y)}><span/>{y}</button>)}</div><p>The preview stays illustrative. Available Census years appear in the explorer.</p></div>
+      <div className={styles.previewColumn}><LandingMapPreview/>
       </div></section>
       <section id="about" className={styles.howItWorks} aria-labelledby="about-title"><div className={styles.sectionIntro}><p className={styles.kicker}>A DIFFERENT WAY TO EXPLORE</p><h2 id="about-title">Browse in 3D <span>·</span> Scrub the timeline <span>·</span> See data change</h2></div><div className={styles.steps}>{[
         ['01','Browse the map','Pan, rotate and zoom. Select any area or building to explore its history.','map'],

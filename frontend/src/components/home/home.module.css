@@ -51,18 +51,18 @@
 .searchExamples button:hover {background:var(--sage);}
 .searchExamples button span {font-size:9px;margin-left:4px;}
 .previewColumn {min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center;}
-.previewCard {position:relative;background:#e8eddf;border:1px solid #ccd6bf;border-radius:15px;overflow:hidden;min-height:370px;}
-.previewHeader {position:relative;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;font-size:11px;color:#48563d;}
+.previewCard {position:relative;background:#e8eddf;border:1px solid #ccd6bf;border-radius:15px;overflow:hidden;height:410px;}
+.previewHeader {position:relative;z-index:2;background:#e8eddfeb;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;font-size:11px;color:#48563d;}
 .previewHeader > div {display:flex;align-items:center;gap:7px;}
 .previewDot {height:5px;width:5px;border-radius:50%;background:#6b8656;}
 .previewBadge {font-size:9px;background:#f8f9f2b3;border:1px solid #c9d3bc;border-radius:20px;padding:5px 9px;}
-.campusArt {display:block;width:100%;height:auto;margin:-24px auto -15px;}
-.mapLabel {position:absolute;top:66px;left:20px;font-size:9px;color:#6b795d;}
-.zoomControls {position:absolute;right:16px;bottom:42px;display:flex;flex-direction:column;background:var(--paper);border:1px solid #cbd3c2;border-radius:7px;overflow:hidden;box-shadow:0 3px 8px #31432910;}
-.zoomControls button {border:0;background:transparent;color:#3e5530;font-size:21px;width:31px;height:31px;}
-.zoomControls button:first-child {border-bottom:1px solid #dce0d4;}
-.zoomControls button:disabled {opacity:.35;cursor:not-allowed;}
-.mapCaption {position:relative;margin:0 18px 13px;font-size:9px;line-height:1.5;color:#6e785f;}
+.previewMap {position:absolute;inset:0;}
+/* Stops short of the bottom so Mapbox's attribution links stay clickable. */
+.previewLink {position:absolute;inset:0 0 28px;z-index:1;}
+.previewLink:focus-visible {outline:3px solid #718c5a;outline-offset:-3px;border-radius:15px;}
+.mapCaption {position:absolute;z-index:2;top:66px;left:18px;margin:0;padding:4px 8px;border-radius:6px;background:#fbfbf9e6;font-size:9px;line-height:1.5;color:#5f6853;pointer-events:none;}
+.previewFallback {position:absolute;inset:60px 0 0;display:grid;place-content:center;padding:24px;text-align:center;font-size:12px;color:#48563d;}
+.previewFallback a {color:var(--green);}
 .previewTimeline {padding:18px 20px 13px;margin-top:12px;background:#f5f4ed;border:1px solid #d6dacb;border-radius:10px;}
 .previewTimeline > div:first-child {display:flex;align-items:center;justify-content:space-between;}
 .previewTimeline > div:first-child > span {font-size:12px;font-weight:700;color:var(--green);}
@@ -116,6 +116,6 @@
 .footer > span {font-weight:700;letter-spacing:.05em;}
 .footer a {color:var(--green);text-decoration:none;}
 @media(min-width:1600px){.hero {gap:90px;padding-top:76px;padding-bottom:76px;}}
-@media(max-width:1050px){.header {padding:0 30px;}.main {padding:0 30px;}.hero {gap:30px;padding:46px 0;}.hero h1 {font-size:53px;}.description {font-size:13px;}.previewCard {min-height:310px;}.previewHeader {font-size:10px;padding:15px;}.campusArt {margin-top:8px;}.searchExamples {gap:5px;}.steps {gap:22px;}.footer {padding:23px 30px;}}
-@media(max-width:760px){.header {height:76px;padding:0 20px;}.brand {font-size:10px;gap:9px;}.brand > span:last-child > span {font-size:9px;}.brandIcon {width:32px;height:36px;font-size:22px;}.header nav {gap:16px;}.header nav a {font-size:10px;}.header nav a span {margin-left:4px;}.main {padding:0 20px;}.hero {grid-template-columns:1fr;gap:32px;padding-top:38px;}.hero h1 {font-size:clamp(46px,10vw,66px);}.description {max-width:500px;font-size:14px;}.heroCopy>.primary {margin:24px 0 27px;}.searchArea {max-width:none;}.previewCard {min-height:0;}.campusArt {max-height:390px;margin-top:-16px;}.searchExamples {gap:8px;}.sectionIntro h2 {font-size:16px;line-height:1.8;}.sectionIntro h2 span {padding:0 4px;}.steps {grid-template-columns:1fr;gap:22px;margin-top:25px;}.steps article {border-right:0;border-bottom:1px solid var(--line);padding:0 0 20px;}.steps article:last-child {border-bottom:0;padding-bottom:0;}.steps article p {max-width:none;}.stepTop {margin-bottom:8px;}.stepTop>span:last-child {margin-right:0;}.buildNote {text-align:left;}.discover {padding-top:35px;}.discoverHeading h2 {font-size:32px;}.discoveryCards {grid-template-columns:1fr;gap:16px;}.discoveryCards article {padding:18px;}.cardArt {height:100px;}.discoveryCards article>p:last-of-type {min-height:0;}.recommendationsCta .primary {font-size:12px;padding:14px 15px;gap:17px;}.footer {padding:23px 20px;flex-wrap:wrap;}.footer p {order:2;width:100%;}.previewHeader {padding:16px;}.previewTimeline {padding:15px 17px;}}
+@media(max-width:1050px){.header {padding:0 30px;}.main {padding:0 30px;}.hero {gap:30px;padding:46px 0;}.hero h1 {font-size:53px;}.description {font-size:13px;}.previewCard {height:340px;}.previewHeader {font-size:10px;padding:15px;}.searchExamples {gap:5px;}.steps {gap:22px;}.footer {padding:23px 30px;}}
+@media(max-width:760px){.header {height:76px;padding:0 20px;}.brand {font-size:10px;gap:9px;}.brand > span:last-child > span {font-size:9px;}.brandIcon {width:32px;height:36px;font-size:22px;}.header nav {gap:16px;}.header nav a {font-size:10px;}.header nav a span {margin-left:4px;}.main {padding:0 20px;}.hero {grid-template-columns:1fr;gap:32px;padding-top:38px;}.hero h1 {font-size:clamp(46px,10vw,66px);}.description {max-width:500px;font-size:14px;}.heroCopy>.primary {margin:24px 0 27px;}.searchArea {max-width:none;}.previewCard {height:320px;}.searchExamples {gap:8px;}.sectionIntro h2 {font-size:16px;line-height:1.8;}.sectionIntro h2 span {padding:0 4px;}.steps {grid-template-columns:1fr;gap:22px;margin-top:25px;}.steps article {border-right:0;border-bottom:1px solid var(--line);padding:0 0 20px;}.steps article:last-child {border-bottom:0;padding-bottom:0;}.steps article p {max-width:none;}.stepTop {margin-bottom:8px;}.stepTop>span:last-child {margin-right:0;}.buildNote {text-align:left;}.discover {padding-top:35px;}.discoverHeading h2 {font-size:32px;}.discoveryCards {grid-template-columns:1fr;gap:16px;}.discoveryCards article {padding:18px;}.cardArt {height:100px;}.discoveryCards article>p:last-of-type {min-height:0;}.recommendationsCta .primary {font-size:12px;padding:14px 15px;gap:17px;}.footer {padding:23px 20px;flex-wrap:wrap;}.footer p {order:2;width:100%;}.previewHeader {padding:16px;}.previewTimeline {padding:15px 17px;}}
 @media(prefers-reduced-motion:reduce){.home * {scroll-behavior:auto;transition:none;}}
