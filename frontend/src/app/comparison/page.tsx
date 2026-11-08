@@ -1,74 +1,127 @@
 
 "use client";
 
+import { useEffect, useState } from "react";
 import styles from "./comparison.module.css";
 
-const neighbourhoods = [
-  {
-    name: "Erindale",
-    score: 72,
-    rent: "$2,950",
-    income: "49%",
-    budget: "No",
-    work: "11 min",
-    school: "15 min",
-    schools: "9",
-    grocery: "300 m",
-    transit: "38",
-    parks: "6",
-    safety: "72 / 100",
-    lifestyle: "75 / 100",
-    gaps: "None in sample",
+
+type SavedPlace = {
+  id: string;
+  name: string;
+  year: number;
+  boundary: string;
+};
+
+const savedKey = "mcp-canada-saved-housing";
+
+const yearConfigs: Record<string, {
+  sourceId: string;
+  indicatorIds: string[];
+}> = {
+  "2001": {
+    sourceId: "census-2001-csv-8d3542c5b0",
+    indicatorIds: [
+      "census-2001-row-3",
+      "census-2001-row-745",
+      "census-2001-row-741",
+      "census-2001-row-743",
+    ],
   },
-  {
-    name: "Cooksville",
-    score: 63,
-    rent: "$2,650",
-    income: "44%",
-    budget: "No",
-    work: "23 min",
-    school: "26 min",
-    schools: "7",
-    grocery: "650 m",
-    transit: "22",
-    parks: "10",
-    safety: "78 / 100",
-    lifestyle: "82 / 100",
-    gaps: "None in sample",
+  "2006": {
+    sourceId: "census-2006-csv-f5eaa4478e",
+    indicatorIds: [
+      "census-2006-row-3",
+      "census-2006-row-1201",
+      "census-2006-row-1197",
+      "census-2006-row-1199",
+      "census-2006-row-803",
+    ],
   },
-  {
-    name: "Port Credit",
-    score: 53,
-    rent: "$2,300",
-    income: "38%",
-    budget: "Yes",
-    work: "31 min",
-    school: "37 min",
-    schools: "—",
-    grocery: "400 m",
-    transit: "16",
-    parks: "7",
-    safety: "—",
-    lifestyle: "75 / 100",
-    gaps: "School locations; safety",
+  "2011": {
+    sourceId: "census-2011-csv-2fc83b4b8e",
+    indicatorIds: [
+      "census-2011-row-2",
+      "census-2011-row-759",
+      "census-2011-row-1366",
+      "census-2011-row-1367",
+      "census-2011-row-1365",
+      "census-2011-row-1358",
+    ],
   },
-];
+  "2016": {
+    sourceId: "census-2016-csv-9d45a882dd",
+    indicatorIds: [
+      "census-2016-row-4",
+      "census-2016-row-1684",
+      "census-2016-row-1690",
+      "census-2016-row-1680",
+      "census-2016-row-8",
+    ],
+  },
+  "2021": {
+    sourceId: "census-2021-xlsx-9a3c372907",
+    indicatorIds: [
+      "census-2021-row-247",
+      "census-2021-row-380",
+      "census-2021-row-381",
+      "census-2021-row-378",
+      "census-2021-row-36",
+    ],
+  },
+};
+const sourceId = "census-2021-xlsx-9a3c372907";
+
+type ComparisonResponse = {
+  geographies: {
+    id: string;
+    name: string;
+  }[];
+
+  indicators: {
+    id: string;
+    label: string;
+    unit: string;
+  }[];
+
+  observations: {
+    geography_id: string;
+    indicator_id: string;
+    census_year: number | null;
+    reference_year: number;
+    period: string;
+    value: string | null;
+    status: string;
+  }[];
+};
 
 const rows = [
-  { label: "Match score", key: "score", best: 0 },
-  { label: "Avg 2-bed rent", key: "rent", best: 2 },
-  { label: "Share of income", key: "income", best: 2 },
-  { label: "Within $2,400 budget", key: "budget", best: 2 },
-  { label: "To work by transit", key: "work", best: 0 },
-  { label: "To school by transit", key: "school", best: 0 },
-  { label: "Schools within 1 km", key: "schools", best: 0 },
-  { label: "Nearest grocery", key: "grocery", best: 0 },
-  { label: "Transit stops within 1 km", key: "transit", best: 0 },
-  { label: "Parks within 1 km", key: "parks", best: 1 },
-  { label: "Safety index", key: "safety", best: 1 },
-  { label: "Lifestyle match", key: "lifestyle", best: 1 },
-  { label: "Data gaps", key: "gaps", best: -1 },
+  {
+    label: "Median after-tax household income (2020)",
+    indicatorId: "census-2021-row-247",
+    unit: "CAD/year",
+  },
+  {
+    label: "Median monthly shelter costs (2021)",
+    indicatorId: "census-2021-row-380",
+    unit: "CAD/month",
+  },
+  {
+    label: "Average monthly shelter costs (2021)",
+    indicatorId: "census-2021-row-381",
+    unit: "CAD/month",
+  },
+  {
+    label: "Tenant households spending 30%+ on shelter",
+    indicatorId: "census-2021-row-378",
+    unit: "percent",
+  },
+  {
+    label: "Median age (2021)",
+    indicatorId: "census-2021-row-36",
+    unit: "years",
+  },
 ] as const;
+
 
 function MapCard({ index }: { index: number }) {
   return (
@@ -86,8 +139,106 @@ function MapCard({ index }: { index: number }) {
   );
 }
 
+
 export default function ComparisonPage() {
+  const [comparisonData, setComparisonData] =
+  useState<ComparisonResponse | null>(null);
+  const [selectedYear, setSelectedYear] = useState("2021");
+
+  const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+  async function loadComparison() {
+    setComparisonData(null);
+    setError("");
+    try {
+      const stored = localStorage.getItem(savedKey);
+      const parsed: unknown = stored ? JSON.parse(stored) : [];
+
+      if (!Array.isArray(parsed)) {
+        throw new Error("Your saved places could not be read.");
+      }
+
+      const places = parsed.filter(
+        (place): place is SavedPlace =>
+          place &&
+          typeof place.id === "string" &&
+          typeof place.name === "string" &&
+          Number.isInteger(place.year) &&
+          typeof place.boundary === "string"
+      );
+
+      if (places.length < 3 || places.length > 5) {
+        throw new Error(
+          "Save between 3 and 5 neighbourhoods before comparing."
+        );
+      }
+
+      if (places.some(place => place.boundary !== "toronto-158")) {
+        throw new Error(
+          "The current comparison supports Toronto 158 neighbourhoods only."
+        );
+      }
+
+      if (new Set(places.map(place => place.id)).size !== places.length) {
+        throw new Error(
+          "A neighbourhood can only be compared once. Remove duplicate saved entries."
+        );
+      }
+
+      setSavedPlaces(places);
+
+    const selectedConfig = yearConfigs[selectedYear];
+
+    const params = new URLSearchParams({
+      geography_ids: places.map(place => place.id).join(","),
+      indicator_ids: selectedConfig.indicatorIds.join(","),
+      source_id: selectedConfig.sourceId,
+    });
+
+      const response = await fetch(
+        `/api/comparison/?${params.toString()}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Unable to load neighbourhood data.");
+      }
+
+      const result: ComparisonResponse = await response.json();
+      setComparisonData(result);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Something went wrong."
+      );
+    }
+  }
+
+  loadComparison();
+}, [selectedYear]);
+
+  const isLoading = !comparisonData && !error;
+  const rows = comparisonData?.indicators.map((indicator) => ({
+    label: indicator.label,
+    indicatorId: indicator.id,
+    unit: indicator.unit,
+  })) ?? [];
+  const neighbourhoods = comparisonData
+  ? savedPlaces.map((place) => {
+      const geography = comparisonData.geographies.find(
+        (g) => g.name === place.name
+      );
+
+      return {
+        id: place.id,
+        geographyId: geography?.id,
+        name: geography?.name ?? place.name,
+      };
+    })
+  : [];
+
   return (
+
     <div className={styles.dashboard}>
       <main className={styles.main}>
         <p className={styles.eyebrow}>
@@ -104,7 +255,17 @@ export default function ComparisonPage() {
         <div className={styles.controls}>
           <div className={styles.period}>
             <span>PERIOD FOR ALL LOCATIONS</span>
-            <strong>2026 ⌄</strong>
+           <select
+            value={selectedYear}
+            onChange={(event) => setSelectedYear(event.target.value)}
+            aria-label="Select comparison period"
+          >
+            <option value="2001">2001 Census</option>
+            <option value="2006">2006 Census</option>
+            <option value="2011">2011 Census</option>
+            <option value="2016">2016 Census</option>
+            <option value="2021">2021 Census</option>
+          </select>
           </div>
 
           <div className={styles.profile}>
@@ -117,19 +278,27 @@ export default function ComparisonPage() {
         </div>
 
         <p className={styles.note}>
-          Green cells mark the best available value in each row.
-          — means missing, never zero. All figures are illustrative.
+          Values are displayed in their respective units.
+          — means the observation is missing, not zero.
+          Census release: {selectedYear}. Indicator reference periods vary by measure.
         </p>
+        {isLoading && (
+          <p className={styles.note}>Loading Toronto neighbourhood data...</p>
+        )}
+
+        {error && (
+          <p className={styles.note}>{error}</p>
+        )}
 
         <section className={styles.comparison}>
-          <h2>2026 snapshot</h2>
+          <h2>{selectedYear} Census snapshot</h2>
 
           <div className={styles.neighbourhoods}>
             {neighbourhoods.map((n, i) => (
-              <div className={styles.place} key={n.name}>
+              <div className={styles.place} key={n.id}>
                 <MapCard index={i} />
                 <h3>{n.name}</h3>
-                <span>Mississauga · Illustrative</span>
+                <span>Toronto · Saved neighbourhood</span>
                 <small>Map concept · not geographic evidence</small>
               </div>
             ))}
@@ -139,21 +308,48 @@ export default function ComparisonPage() {
             <table>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.key}>
+                  <tr key={row.indicatorId}>
                     <th>{row.label}</th>
 
-                    {neighbourhoods.map((n, i) => {
-                      const value = n[row.key];
-                      const isBest =
-                        row.best === i && value !== "—";
+                    {neighbourhoods.map((n) => {
+                      const observation = comparisonData?.observations.find(
+                        (o) =>
+                          o.geography_id === n.geographyId &&
+                          o.indicator_id === row.indicatorId
+                      );
+
+                      const value =
+                        observation?.status === "observed" &&
+                        observation.value !== null
+                          ? Number(observation.value)
+                          : null;
+
+                      let displayValue = "—";
+
+                      if (value !== null && Number.isFinite(value)) {
+                        if (row.unit === "CAD/year" || row.unit === "CAD/month") {
+                          displayValue = `$${value.toLocaleString("en-CA", {
+                            maximumFractionDigits: 0,
+                          })}`;
+                        } else if (row.unit === "percent") {
+                          displayValue = `${value.toLocaleString("en-CA", {
+                            maximumFractionDigits: 1,
+                          })}%`;
+                        } else if (row.unit === "years") {
+                          displayValue = `${value.toLocaleString("en-CA", {
+                            maximumFractionDigits: 1,
+                          })}`;
+                        }
+                        else if (row.unit === "persons" || row.unit === "households") {
+                          displayValue = value.toLocaleString("en-CA", {
+                            maximumFractionDigits: 0,
+                          });
+                        }
+                      }
 
                       return (
-                        <td
-                          key={n.name}
-                          className={isBest ? styles.best : ""}
-                        >
-                          {value}
-                          {row.key === "score" && " / 100"}
+                        <td key={n.id}>
+                          {displayValue}
                         </td>
                       );
                     })}
@@ -165,10 +361,9 @@ export default function ComparisonPage() {
         </section>
 
         <p className={styles.disclaimer}>
-          Illustrative comparison data only. Replace sample figures
-          with verified neighbourhood data before presenting results.
+          Source: Statistics Canada, {selectedYear} Census. Indicator definitions and reference periods may vary by Census year.
         </p>
-        
+                
         {/* AI-generated neighbourhood recommendations */}
         <section className={styles.recommendations}>
           <h2>Where could you live?</h2>
@@ -222,7 +417,7 @@ export default function ComparisonPage() {
 
         {/* Local historical context */}
         <section className={styles.history}>
-          <h2>Local history in context · viewing 2026</h2>
+          <h2>Local history in context</h2>
 
           <p>
             Compare how each neighbourhood's past shaped today's housing,
@@ -253,14 +448,15 @@ export default function ComparisonPage() {
 
         {/* Data methodology */}
         <section className={styles.method}>
-          <h2>Illustrative data & method</h2>
+          <h2>Data coverage & method</h2>
 
           <p>
-            Scores and measurements demonstrate the comparison layout;
-            no live datasets are connected. Match scores are sample
-            outputs, not calculated from this table. Missing factors
-            must be excluded and available weights normalized in the
-            connected product.
+            The comparison table uses observed values from the 2021
+            Toronto neighbourhood Census profiles. The recommendations
+            and match scores are still illustrative and are not yet
+            calculated from your personal profile. Missing factors
+            must be excluded and available weights normalized when
+            calculating personalized scores.
           </p>
 
           <p>

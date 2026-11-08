@@ -114,6 +114,17 @@ export function ExplorationWorkspace({ renderMap }: {
         if (!isSaved && saved.length < 5) savePlaces([...saved, { id: profile.geography.id, name: profile.geography.name, year: profile.year, boundary: profile.geography.boundary_set }]);
       }} /> : <aside className={styles.detailsPanel}><div className={styles.panelScroll} role={error ? 'alert' : 'status'}><span className={styles.kicker}>NEIGHBOURHOOD DETAILS</span><h2>{error ? 'Could not load this selection' : loadError ? 'Waiting for published data' : 'Loading housing data…'}</h2><p>{error || loadError || 'Finding the selected Census period and its sources.'}</p>{error && <button className={styles.secondaryButton} onClick={() => setSelection(s => s ? { ...s } : null)}>Try again</button>}</div></aside>}
     </main>
-    <dialog className={styles.savedDialog} ref={dialog} aria-labelledby="saved-title"><div className={styles.dialogHeading}><h2 id="saved-title">Saved for comparison</h2><button autoFocus type="button" aria-label="Close saved places" onClick={() => dialog.current?.close()}>×</button></div><p>Up to five places. The shared comparison view will use these selections.</p>{storageNotice && <p role="status">{storageNotice}</p>}{saved.length === 0 ? <p>No places saved yet. Choose “Add to compare” in the details panel.</p> : <ul>{saved.map(place => <li key={`${place.id}:${place.year}`}><div><strong>{place.name}</strong><span>{place.year} Census · {place.boundary}</span></div><button type="button" aria-label={`Remove ${place.name} ${place.year}`} onClick={() => savePlaces(saved.filter(s => s !== place))}>Remove</button></li>)}</ul>}<button type="button" className={styles.primaryButton} onClick={() => dialog.current?.close()}>Continue exploring</button></dialog>
+    <dialog className={styles.savedDialog} ref={dialog} aria-labelledby="saved-title"><div className={styles.dialogHeading}><h2 id="saved-title">Saved for comparison</h2><button autoFocus type="button" aria-label="Close saved places" onClick={() => dialog.current?.close()}>×</button></div><p>Up to five places. The shared comparison view will use these selections.</p>{storageNotice && <p role="status">{storageNotice}</p>}{saved.length === 0 ? <p>No places saved yet. Choose “Add to compare” in the details panel.</p> : <ul>{saved.map(place => <li key={`${place.id}:${place.year}`}><div><strong>{place.name}</strong><span>{place.year} Census · {place.boundary}</span></div><button type="button" aria-label={`Remove ${place.name} ${place.year}`} onClick={() => savePlaces(saved.filter(s => s !== place))}>Remove</button></li>)}</ul>}<div>
+  <Link href="/comparison/" className={styles.primaryButton}>
+    Compare saved places →
+  </Link>
+  <button
+    type="button"
+    className={styles.secondaryButton}
+    onClick={() => dialog.current?.close()}
+  >
+    Continue exploring
+  </button>
+</div></dialog>
   </div>;
 }
