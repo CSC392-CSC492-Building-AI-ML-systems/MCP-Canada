@@ -39,6 +39,10 @@
 .searchResults ul {margin:8px 0 0;padding:0;list-style:none;}
 .searchResults li a {display:flex;align-items:center;justify-content:space-between;padding:10px 6px;border-top:1px solid #e4e7dd;color:var(--ink);font-size:12px;text-decoration:none;}
 .searchResults li a:hover {background:var(--sage);}
+.searchResults li button {display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:10px 6px;border:0;border-top:1px solid #e4e7dd;background:none;color:var(--ink);font:inherit;font-size:12px;text-align:left;cursor:pointer;}
+.searchResults li button:hover {background:var(--sage);}
+.searchResults li small {display:block;margin-top:2px;color:var(--muted);font-size:10px;}
+.searchResults .resultsLabel {margin:10px 0 4px;color:var(--muted);font-size:10px;font-weight:700;}
 .searchResults p {font-size:11px;color:var(--muted);line-height:1.65;margin:8px 0;}
 .searchResults p a {color:var(--green);}
 .searchExamples {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:19px;}

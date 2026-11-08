@@ -5,8 +5,10 @@ import LocationSearch from "./LocationSearch";
 import MapView from "./MapView";
 import type { ExplorationSelection } from "@/components/explorer/types";
 import { findBoundary, loadBoundaries, type Boundaries } from "@/lib/boundaries";
-import { MAPBOX_TOKEN, type Place } from "@/lib/mapbox";
+import { MAPBOX_TOKEN, placeFromSearch, type Place } from "@/lib/mapbox";
 import styles from "./HousingMap.module.css";
+
+const OUTSIDE_NOTICE = "This location is outside the loaded neighbourhood boundaries, so the selection did not change.";
 
 /** Map and location search for the housing explorer's map slot. Outlines the
  * active boundary set and highlights the selected neighbourhood;
@@ -15,8 +17,10 @@ export default function HousingMap({ selection, onSelectionChange }: {
   selection: ExplorationSelection;
   onSelectionChange: (selection: ExplorationSelection) => void;
 }) {
-  const [selected, setSelected] = useState<Place | null>(null);
-  const [notice, setNotice] = useState("");
+  // A place chosen on the landing page arrives in the URL. Its neighbourhood, if it
+  // has one, is already selected by the workspace from ?neighbourhood=.
+  const [selected, setSelected] = useState<Place | null>(() => typeof window === "undefined" ? null : placeFromSearch(window.location.search));
+  const [notice, setNotice] = useState(() => selected && !new URLSearchParams(window.location.search).has("neighbourhood") ? OUTSIDE_NOTICE : "");
   const [loaded, setLoaded] = useState<{ setId: string; data: Boundaries } | null>(null);
   // Ignore outlines from a previous boundary set while the new one loads.
   const boundaries = loaded?.setId === selection.boundarySetId ? loaded.data : null;
@@ -35,7 +39,7 @@ export default function HousingMap({ selection, onSelectionChange }: {
     setSelected(place);
     // Only the active boundary set is searched; a point is never mapped to another set.
     const match = boundaries && findBoundary(boundaries, place.coordinates);
-    setNotice(match ? "" : "This location is outside the loaded neighbourhood boundaries, so the selection did not change.");
+    setNotice(match ? "" : OUTSIDE_NOTICE);
     if (match) onSelectionChange({ ...selection, geographyId: match.properties.geography_id });
   }
 

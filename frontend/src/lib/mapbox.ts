@@ -41,6 +41,29 @@ type RetrieveResponse = {
   }[];
 };
 
+/** The /housing link for a place, with the neighbourhood containing it if there is one. */
+export function placeHref(place: Place, neighbourhoodId?: string): string {
+  const params = new URLSearchParams({
+    lng: String(place.coordinates[0]),
+    lat: String(place.coordinates[1]),
+    place: place.address || place.name,
+  });
+  if (neighbourhoodId) params.set("neighbourhood", neighbourhoodId);
+  return `/housing/?${params}`;
+}
+
+/** Reads a place from a URL query; anything missing or outside Toronto is ignored. */
+export function placeFromSearch(search: string): Place | null {
+  const params = new URLSearchParams(search);
+  const label = params.get("place");
+  const lng = Number(params.get("lng"));
+  const lat = Number(params.get("lat"));
+  const [minLng, minLat, maxLng, maxLat] = TORONTO_BBOX;
+  if (!label || !params.has("lng") || !params.has("lat")) return null;
+  if (!(lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat)) return null;
+  return { name: label, address: label, coordinates: [lng, lat] };
+}
+
 // Suggest + retrieve calls that share a session token are billed as one search session.
 export function newSessionToken(): string {
   return crypto.randomUUID();
