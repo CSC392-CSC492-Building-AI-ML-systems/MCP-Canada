@@ -19,8 +19,16 @@ export default function HousingMap({ selection, onSelectionChange }: {
 }) {
   // A place chosen on the landing page arrives in the URL. Its neighbourhood, if it
   // has one, is already selected by the workspace from ?neighbourhood=.
-  const [selected, setSelected] = useState<Place | null>(() => typeof window === "undefined" ? null : placeFromSearch(window.location.search));
+  const [selected, setSelected] = useState<{ place: Place; geographyId: string } | null>(() => {
+    const place = typeof window === "undefined" ? null : placeFromSearch(window.location.search);
+    return place && { place, geographyId: selection.geographyId };
+  });
   const [notice, setNotice] = useState(() => selected && !new URLSearchParams(window.location.search).has("neighbourhood") ? OUTSIDE_NOTICE : "");
+  // A searched place only stays marked while the neighbourhood selected with it does.
+  if (selected && selected.geographyId !== selection.geographyId) {
+    setSelected(null);
+    setNotice("");
+  }
   const [loaded, setLoaded] = useState<{ setId: string; data: Boundaries } | null>(null);
   // Ignore outlines from a previous boundary set while the new one loads.
   const boundaries = loaded?.setId === selection.boundarySetId ? loaded.data : null;
@@ -42,9 +50,9 @@ export default function HousingMap({ selection, onSelectionChange }: {
   }, [selection.boundarySetId]);
 
   function onPlace(place: Place) {
-    setSelected(place);
     // Only the active boundary set is searched; a point is never mapped to another set.
     const match = boundaries && findBoundary(boundaries, place.coordinates);
+    setSelected({ place, geographyId: match ? match.properties.geography_id : selection.geographyId });
     setNotice(match ? "" : OUTSIDE_NOTICE);
     if (match) onSelectionChange({ ...selection, geographyId: match.properties.geography_id });
   }
@@ -56,8 +64,9 @@ export default function HousingMap({ selection, onSelectionChange }: {
   }
 
   return <div className={styles.stage}>
-    <MapView selected={selected} boundaries={boundaries} selectedGeographyId={selection.geographyId}
+    <MapView selected={selected?.place ?? null} boundaries={boundaries} selectedGeographyId={selection.geographyId}
       onGeographyClick={(geographyId) => onSelectionChange({ ...selection, geographyId })}
+      onPlaceDismiss={() => { setSelected(null); setNotice(""); }}
       show3dObjects={show3d} showTransit={showTransit} className={styles.map} />
     <div className={styles.topRow}>
       <div className={styles.overlayColumn}>

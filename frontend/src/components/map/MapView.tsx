@@ -15,6 +15,7 @@ type Props = {
   boundaries?: Boundaries | null;
   selectedGeographyId?: string;
   onGeographyClick?: (geographyId: string) => void;
+  onPlaceDismiss?: () => void;
   // Mapbox Standard basemap options, toggled by the layer chips.
   show3dObjects?: boolean;
   showTransit?: boolean;
@@ -26,7 +27,7 @@ const HOME = { center: TORONTO_CENTER, zoom: 11, pitch: 45, bearing: -17 };
 const EMPTY: Boundaries = { type: "FeatureCollection", features: [] };
 const isSelected = (id: string) => ["==", ["get", "geography_id"], id];
 
-export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, show3dObjects = true, showTransit = true, className }: Props) {
+export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -36,7 +37,10 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
   // A neighbourhood picked on the map is already in view, so the camera stays put.
   const clickedIdRef = useRef<string | null>(null);
 
+  const dismissRef = useRef(onPlaceDismiss);
+
   useEffect(() => { clickRef.current = onGeographyClick; }, [onGeographyClick]);
+  useEffect(() => { dismissRef.current = onPlaceDismiss; }, [onPlaceDismiss]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -53,6 +57,13 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     });
     map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
     mapRef.current = map;
+    // Only the place popup has a close button. Popup "close" events can't be used:
+    // they also fire when the user clicks elsewhere on the map.
+    const container = map.getContainer();
+    const onContainerClick = (event: MouseEvent) => {
+      if ((event.target as Element).closest(".mapboxgl-popup-close-button")) dismissRef.current?.();
+    };
+    container.addEventListener("click", onContainerClick);
 
     map.on("load", () => {
       map.addSource(SOURCE, { type: "geojson", data: EMPTY });
@@ -87,6 +98,7 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     });
 
     return () => {
+      container.removeEventListener("click", onContainerClick);
       markerRef.current = null;
       mapRef.current = null;
       map.remove();
@@ -119,8 +131,10 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !selected) return;
+    if (!map) return;
     markerRef.current?.remove();
+    markerRef.current = null;
+    if (!selected) return;
     markerRef.current = new mapboxgl.Marker({ color: "#2f5d3a" })
       .setLngLat(selected.coordinates)
       .setPopup(new mapboxgl.Popup({ offset: 24 }).setText(selected.address || selected.name))

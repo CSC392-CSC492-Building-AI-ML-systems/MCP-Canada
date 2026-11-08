@@ -52,3 +52,12 @@ export function boundsOf(geometry: BoundaryGeometry): [LngLat, LngLat] {
   }
   return [[minX, minY], [maxX, maxY]];
 }
+
+/** The neighbourhood in `target` containing the centre of `geographyId` in `source`.
+ * This is a nearest place on the map; the two areas are not statistically equivalent. */
+export function findAtSameLocation(source: Boundaries, geographyId: string, target: Boundaries): Boundaries["features"][number] | undefined {
+  const feature = source.features.find((f) => f.properties.geography_id === geographyId);
+  if (!feature) return undefined;
+  const [[west, south], [east, north]] = boundsOf(feature.geometry);
+  return findBoundary(target, [(west + east) / 2, (south + north) / 2]);
+}
