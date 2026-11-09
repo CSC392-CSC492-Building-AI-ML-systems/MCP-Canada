@@ -75,3 +75,22 @@ def observations(request):
             for row in rows
         ],
     })
+
+
+@require_GET
+def boundaries(request):
+    """One boundary set as a GeoJSON FeatureCollection. Sets are never mixed."""
+    geography_set_id = request.GET.get("geography_set_id", "").strip()
+    if not geography_set_id:
+        return JsonResponse({"error": "Required query parameters: geography_set_id"}, status=400)
+    rows = Geography.objects.filter(
+        geography_set_id=geography_set_id, geometry__isnull=False,
+    ).order_by("code").values("id", "code", "name", "geometry")
+    return JsonResponse({
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "geometry": row["geometry"],
+             "properties": {"geography_id": row["id"], "code": row["code"], "name": row["name"]}}
+            for row in rows
+        ],
+    })

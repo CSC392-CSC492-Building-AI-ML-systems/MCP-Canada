@@ -1,0 +1,6 @@
+.map { position: absolute; inset: 0; }
+/* Below the workspace's top line, clear of the Mapbox zoom controls. */
+.search { position: absolute; top: 72px; right: 60px; z-index: 3; width: min(340px, calc(100% - 88px)); }
+.map :global(.mapboxgl-ctrl-top-right) { top: 62px; }
+.missingToken { position: absolute; inset: 0; display: grid; place-content: center; padding: 32px; text-align: center; }
+.notice { margin: 8px 0 0; padding: 8px 12px; font-size: 12px; line-height: 1.5; color: #5d4a2e; background: #fffdf7; border: 1px solid #d8d2c2; border-radius: 8px; }
