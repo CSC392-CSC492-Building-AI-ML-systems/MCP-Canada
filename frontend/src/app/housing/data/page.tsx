@@ -1,35 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-
-type Source = {
-  id: string;
-  title: string;
-  publisher: string;
-  url: string;
-  coverage: string;
-};
-
-type Geography = {
-  id: string;
-  name: string;
-  geography_set__kind: string;
-  geography_set__version: string;
-};
-
-type Indicator = {
-  id: string;
-  label: string;
-  unit: string;
-  definition: string;
-};
-
-type Catalog = {
-  sources: Source[];
-  geographies: Geography[];
-  indicators: Indicator[];
-};
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  defaultHousingSelection,
+  indicatorsForGeography,
+  indicatorsForTopic,
+  preferredIndicator,
+  sourcesForSelection,
+  type Catalog,
+  type DataTopic,
+} from "./selection";
+import { calculateMonthlyRentBudget } from "./budget";
 
 type Observation = {
   census_year: number | null;
@@ -51,8 +33,6 @@ type ObservationError = {
   message: string;
 };
 
-type DataTopic = "rent" | "income" | "burden";
-
 function LoadingIndicator({ label }: { label: string }) {
   return (
     <div className="loading-state" role="status" aria-label={label}>
@@ -61,12 +41,6 @@ function LoadingIndicator({ label }: { label: string }) {
     </div>
   );
 }
-
-const topicTerms: Record<DataTopic, RegExp> = {
-  rent: /\brent\b|shelter cost|rental/i,
-  income: /\bincome\b/i,
-  burden: /housing burden|shelter[- ]cost burden|rent burden/i,
-};
 
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
@@ -106,8 +80,7 @@ export default function Home() {
   const [indicatorId, setIndicatorId] = useState("");
   const [sourceId, setSourceId] = useState("");
   const [annualIncome, setAnnualIncome] = useState("");
-  const [monthlyRentBudget, setMonthlyRentBudget] = useState("");
-  const [bedrooms, setBedrooms] = useState("1");
+  const [rentSharePercent, setRentSharePercent] = useState("30");
   const [observationResult, setObservationResult] =
     useState<ObservationResult | null>(null);
   const [observationError, setObservationError] =
@@ -118,17 +91,10 @@ export default function Home() {
     getJson<Catalog>("/api/catalog/", controller.signal)
       .then((data) => {
         setCatalog(data);
-        const neighbourhood =
-          data.geographies.find((geography) => geography.geography_set__kind === "neighbourhood") ??
-          data.geographies[0];
-        const rentIndicator = data.indicators.find((indicator) =>
-          topicTerms.rent.test(
-            `${indicator.label} ${indicator.definition} ${indicator.unit}`,
-          ),
-        );
-        setGeographyId(neighbourhood?.id ?? "");
-        setIndicatorId(rentIndicator?.id ?? "");
-        setSourceId(data.sources[0]?.id ?? "");
+        const selection = defaultHousingSelection(data);
+        setGeographyId(selection.geography?.id ?? "");
+        setIndicatorId(selection.indicator?.id ?? "");
+        setSourceId(selection.source?.id ?? "");
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
@@ -141,15 +107,25 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
+  const selectedGeography = catalog?.geographies.find(
+    (geography) => geography.id === geographyId,
+  );
   const indicators = useMemo(
     () =>
-      (catalog?.indicators ?? []).filter((indicator) =>
-        topicTerms[topic].test(
-          `${indicator.label} ${indicator.definition} ${indicator.unit}`,
-        ),
-      ),
-    [catalog, topic],
+      catalog
+        ? indicatorsForGeography(
+            indicatorsForTopic(catalog, topic),
+            selectedGeography,
+          )
+        : [],
+    [catalog, selectedGeography, topic],
   );
+  const selectedIndicator = indicators.find(
+    (indicator) => indicator.id === indicatorId,
+  );
+  const availableSources = catalog
+    ? sourcesForSelection(catalog, selectedGeography, selectedIndicator)
+    : [];
 
   const selectionKey = `${geographyId}:${indicatorId}:${sourceId}`;
 
@@ -196,21 +172,20 @@ export default function Home() {
     observations === null &&
     currentError === null;
 
-  const selectedIndicator = indicators.find(
-    (indicator) => indicator.id === indicatorId,
-  );
-  const selectedSource = catalog?.sources.find(
+  const selectedSource = availableSources.find(
     (source) => source.id === sourceId,
   );
-  const selectedGeography = catalog?.geographies.find(
-    (geography) => geography.id === geographyId,
-  );
 
-  const annualIncomeValue = Number(annualIncome);
-  const monthlyBudgetValue = Number(monthlyRentBudget);
-  const hasIncome = annualIncome !== "" && annualIncomeValue > 0;
-  const hasBudget = monthlyRentBudget !== "" && monthlyBudgetValue >= 0;
-  const suggestedRentLimit = hasIncome ? (annualIncomeValue / 12) * 0.3 : null;
+  const rentShareValue = Number(rentSharePercent);
+  const hasValidRentShare =
+    rentSharePercent.trim() !== "" &&
+    Number.isFinite(rentShareValue) &&
+    rentShareValue >= 0 &&
+    rentShareValue <= 100;
+  const monthlyRentBudget = calculateMonthlyRentBudget(
+    annualIncome,
+    rentSharePercent,
+  );
 
   const chartRows = (observations ?? []).filter(
     (row) => row.status === "observed" && row.value !== null,
@@ -284,7 +259,7 @@ export default function Home() {
                 <p className="section-kicker">01 <span /> YOUR STARTING POINT</p>
                 <h2 id="budget-heading">What feels comfortable?</h2>
                 <p className="section-description">
-                  Add a few details to get a simple monthly rent estimate.
+                  Choose your household income and the share you want to spend on rent.
                 </p>
               </div>
               <span className="section-stamp">YOUR<br />BUDGET</span>
@@ -292,96 +267,110 @@ export default function Home() {
             <div className="budget-layout">
               <div className="budget-fields">
                 <label>
-                  Annual household income <span className="label-note">OPTIONAL · BEFORE TAX</span>
+                  <span className="budget-field-heading">
+                    Annual household income (before tax)
+                  </span>
+                  <span className="budget-field-hint">
+                    Before-tax household income for one year.
+                  </span>
                   <span className="input-with-prefix">
                     <span aria-hidden="true">$</span>
                     <input
                       type="number"
-                      min="0"
+                      min="1"
                       inputMode="decimal"
-                      placeholder="68,000"
+                      placeholder="e.g. 68,000"
                       value={annualIncome}
+                      aria-label="Annual household income before tax in Canadian dollars"
                       onChange={(event) => setAnnualIncome(event.target.value)}
                     />
                     <span className="input-suffix">CAD / year</span>
                   </span>
                 </label>
                 <label>
-                  Monthly rent budget
-                  <span className="input-with-prefix">
-                    <span aria-hidden="true">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      inputMode="decimal"
-                      placeholder="2,200"
-                      value={monthlyRentBudget}
-                      onChange={(event) => setMonthlyRentBudget(event.target.value)}
-                    />
-                    <span className="input-suffix">CAD / month</span>
+                  <span className="budget-field-heading">Share of income for rent</span>
+                  <span className="budget-field-hint">
+                    Drag to choose a share from 0% to 100%.
                   </span>
-                </label>
-                <label>
-                  Bedrooms
-                  <select
-                    value={bedrooms}
-                    onChange={(event) => setBedrooms(event.target.value)}
-                  >
-                    <option value="0">Studio</option>
-                    <option value="1">1 bedroom</option>
-                    <option value="2">2 bedrooms</option>
-                    <option value="3">3 bedrooms</option>
-                    <option value="4">4+ bedrooms</option>
-                  </select>
+                  <span className="rent-share-control">
+                    <input
+                      className="rent-share-slider"
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      aria-label="Share of annual household income to budget for rent"
+                      aria-valuetext={`${rentSharePercent}%`}
+                      aria-describedby="rent-share-range"
+                      value={rentSharePercent}
+                      style={{
+                        "--range-progress": `${rentShareValue}%`,
+                      } as CSSProperties}
+                      onChange={(event) => setRentSharePercent(event.target.value)}
+                    />
+                    <output className="rent-share-value" aria-live="polite">
+                      {rentSharePercent}%
+                    </output>
+                  </span>
+                  <span className="range-hint" id="rent-share-range">
+                    <span>0%</span><span>100%</span>
+                  </span>
                 </label>
               </div>
               <aside className="estimate-card" aria-live="polite">
                 <span className="estimate-icon" aria-hidden="true">↗</span>
-                <p className="estimate-label">A QUICK GUIDELINE</p>
-                {hasIncome && suggestedRentLimit !== null && (
+                <p className="estimate-label">YOUR ESTIMATED MONTHLY RENT BUDGET</p>
+                {monthlyRentBudget !== null && (
                   <>
-                    <p className="estimate-value">
+                    <output className="estimate-value" aria-label="Estimated monthly rent budget">
                       {new Intl.NumberFormat("en-CA", {
                         style: "currency",
                         currency: "CAD",
                         maximumFractionDigits: 0,
-                      }).format(suggestedRentLimit)}
-                      <span>/ month</span>
-                    </p>
+                      }).format(monthlyRentBudget)}
+                      <span>monthly</span>
+                    </output>
                     <p className="estimate-copy">
-                      About 30% of your gross income. A common rule of thumb,
-                      not a final affordability decision.
+                      Your rent budget based on the income and share you chose.
                     </p>
                   </>
                 )}
-                {!hasIncome && (
+                {monthlyRentBudget === null && (
                   <>
-                    <p className="estimate-value estimate-placeholder">Your number, your starting point</p>
+                    <p className="estimate-value estimate-placeholder">
+                      {annualIncome.trim() === ""
+                        ? "Your estimate will appear here"
+                        : "Check your entries"}
+                    </p>
                     <p className="estimate-copy">
-                      Add an income above to see a rough monthly guideline.
+                      {hasValidRentShare
+                        ? "Add your annual household income to see your monthly rent budget."
+                        : "Enter a rent share from 0% to 100% and a positive annual income."}
                     </p>
                   </>
-                )}
-                {hasBudget && hasIncome && (
-                  <div className="budget-share">
-                    <span>Your budget uses</span>
-                    <strong>{((monthlyBudgetValue * 12 / annualIncomeValue) * 100).toFixed(1)}% of gross income</strong>
-                  </div>
-                )}
-                {hasBudget && !hasIncome && (
-                  <div className="budget-share">
-                    <span>Your monthly rent budget</span>
-                    <strong>{new Intl.NumberFormat("en-CA", {
-                      style: "currency",
-                      currency: "CAD",
-                      maximumFractionDigits: 0,
-                    }).format(monthlyBudgetValue)}</strong>
-                  </div>
                 )}
                 <p className="estimate-footnote">
-                  {bedrooms === "0" ? "Studio selected" : `${bedrooms}${bedrooms === "4" ? "+" : ""} bedroom${bedrooms === "1" ? "" : "s"} selected`}
-                  {" · "}Bedrooms may not be available in historical records.
+                  Planning estimate based on before-tax income—not a rent quote or an affordability decision.
                 </p>
+                {monthlyRentBudget !== null && (
+                  <details className="calculation-details">
+                    <summary>Show calculation</summary>
+                    <p>
+                      {new Intl.NumberFormat("en-CA", {
+                        style: "currency",
+                        currency: "CAD",
+                        maximumFractionDigits: 0,
+                      }).format(Number(annualIncome))}{" "}
+                      × {rentSharePercent}% ÷ 12 months ={" "}
+                      {new Intl.NumberFormat("en-CA", {
+                        style: "currency",
+                        currency: "CAD",
+                        maximumFractionDigits: 0,
+                      }).format(monthlyRentBudget)}{" "}
+                      per month.
+                    </p>
+                  </details>
+                )}
               </aside>
             </div>
           </section>
@@ -406,13 +395,21 @@ export default function Home() {
                   value={topic}
                   onChange={(event) => {
                     const nextTopic = event.target.value as DataTopic;
-                    const nextIndicator = catalog.indicators.find((indicator) =>
-                      topicTerms[nextTopic].test(
-                        `${indicator.label} ${indicator.definition} ${indicator.unit}`,
-                      ),
+                    const nextIndicators = indicatorsForGeography(
+                      indicatorsForTopic(catalog, nextTopic),
+                      selectedGeography,
+                    );
+                    const nextIndicator = selectedGeography
+                      ? preferredIndicator(nextIndicators, selectedGeography)
+                      : nextIndicators[0];
+                    const nextSources = sourcesForSelection(
+                      catalog,
+                      selectedGeography,
+                      nextIndicator,
                     );
                     setTopic(nextTopic);
                     setIndicatorId(nextIndicator?.id ?? "");
+                    setSourceId(nextSources[0]?.id ?? "");
                   }}
                 >
                   <option value="rent">Rent & shelter costs</option>
@@ -424,7 +421,28 @@ export default function Home() {
                 Geography
                 <select
                   value={geographyId}
-                  onChange={(event) => setGeographyId(event.target.value)}
+                  onChange={(event) => {
+                    const nextGeography = catalog.geographies.find(
+                      (geography) => geography.id === event.target.value,
+                    );
+                    const nextIndicators = indicatorsForGeography(
+                      indicatorsForTopic(catalog, topic),
+                      nextGeography,
+                    );
+                    const nextIndicator =
+                      nextIndicators.find((indicator) => indicator.id === indicatorId) ??
+                      (nextGeography
+                        ? preferredIndicator(nextIndicators, nextGeography)
+                        : nextIndicators[0]);
+                    const nextSources = sourcesForSelection(
+                      catalog,
+                      nextGeography,
+                      nextIndicator,
+                    );
+                    setGeographyId(event.target.value);
+                    setIndicatorId(nextIndicator?.id ?? "");
+                    setSourceId(nextSources[0]?.id ?? "");
+                  }}
                   disabled={catalog.geographies.length === 0}
                 >
                   {catalog.geographies.map((geography) => (
@@ -439,7 +457,18 @@ export default function Home() {
                 Measure
                 <select
                   value={indicatorId}
-                  onChange={(event) => setIndicatorId(event.target.value)}
+                  onChange={(event) => {
+                    const nextIndicator = indicators.find(
+                      (indicator) => indicator.id === event.target.value,
+                    );
+                    const nextSources = sourcesForSelection(
+                      catalog,
+                      selectedGeography,
+                      nextIndicator,
+                    );
+                    setIndicatorId(event.target.value);
+                    setSourceId(nextSources[0]?.id ?? "");
+                  }}
                   disabled={indicators.length === 0}
                 >
                   {indicators.map((indicator) => (
@@ -456,7 +485,7 @@ export default function Home() {
                   onChange={(event) => setSourceId(event.target.value)}
                   disabled={catalog.sources.length === 0}
                 >
-                  {catalog.sources.map((source) => (
+                  {availableSources.map((source) => (
                     <option key={source.id} value={source.id}>
                       {source.title}
                     </option>
@@ -466,8 +495,15 @@ export default function Home() {
             </div>
             {(catalog.sources.length === 0 ||
             catalog.geographies.length === 0 ||
-            indicators.length === 0) ? (
-              <LoadingIndicator label="Loading housing records…" />
+            catalog.indicators.length === 0) ? (
+              <p className="empty-state" role="status">
+                No housing data is available in the database yet.
+              </p>
+            ) : indicators.length === 0 || availableSources.length === 0 ? (
+              <p className="empty-state" role="status">
+                No {topic === "rent" ? "rent" : topic === "income" ? "income" : "housing burden"} measures are available for this geography.
+                Choose another geography or topic.
+              </p>
             ) : (
               <>
                 {selectedIndicator && (
@@ -499,7 +535,10 @@ export default function Home() {
                 ) : loadingObservations ? (
                   <LoadingIndicator label="Loading records…" />
                 ) : observations?.length === 0 ? (
-                  <LoadingIndicator label="Loading housing records…" />
+                  <p className="empty-state" role="status">
+                    No records are available for this measure, geography, and source release.
+                    Try another selection.
+                  </p>
                 ) : observations ? (
                   <>
                     {chartRows.length > 0 && (
