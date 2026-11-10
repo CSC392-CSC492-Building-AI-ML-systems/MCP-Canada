@@ -83,3 +83,15 @@ class SourceTableRow(models.Model):
     cells = models.JSONField(default=dict, blank=True)
     class Meta:
         constraints = [models.UniqueConstraint(fields=["source", "locator"], name="unique_source_row")]
+
+
+class MCPCacheEntry(models.Model):
+    """Last result of one MCP-Canada tool call, with the source and time it reports."""
+    key = models.CharField(max_length=64, unique=True, help_text="sha256 of tool + arguments")
+    tool = models.CharField(max_length=200)
+    arguments = models.JSONField(default=dict, blank=True)
+    payload = models.JSONField()
+    source_api = models.CharField(max_length=200, blank=True)
+    source_url = models.URLField(max_length=1000, blank=True)
+    source_timestamp = models.DateTimeField(null=True, blank=True)
+    fetched_at = models.DateTimeField()

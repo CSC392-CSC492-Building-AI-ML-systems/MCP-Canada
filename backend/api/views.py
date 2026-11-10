@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from django.db.models import Count
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
@@ -11,6 +13,7 @@ from .models import (
     SourceRelease,
     SourceTableRow,
 )
+from .mcp_canada_cache import fetch_from_mcp_canada
 from .services import get_health
 
 
@@ -94,3 +97,30 @@ def boundaries(request):
             for row in rows
         ],
     })
+
+
+CPI_SERIES = "V41690973"  # Total CPI, Bank of Canada Valet (same series as official-sources.json)
+
+
+@require_GET
+def mcp_canada_cpi(request):
+    """Monthly total CPI, fetched live from MCP-Canada and cached for 24 hours."""
+    start_date = request.GET.get("start_date", "2020-01-01").strip()
+    try:
+        date.fromisoformat(start_date)
+    except ValueError:
+        return JsonResponse({"error": "start_date must be YYYY-MM-DD"}, status=400)
+
+    result = fetch_from_mcp_canada(
+        "boc_get_observations",
+        {"series_names": CPI_SERIES, "start_date": start_date},
+        max_age=timedelta(hours=24),
+        refresh=request.GET.get("refresh") == "1",
+    )
+    series = (result.pop("data") or {}).get(CPI_SERIES, {})
+    result["label"] = series.get("label")
+    result["observations"] = [
+        {"period": period, "value": value}
+        for period, value in sorted(series.get("observations", {}).items())
+    ]
+    return JsonResponse(result, status=503 if result["status"] == "unavailable" else 200)
