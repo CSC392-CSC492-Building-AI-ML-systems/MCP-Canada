@@ -1,0 +1,94 @@
+.page {
+  --profile-green: #295738;
+  --profile-paper: #fbfbf9;
+  --profile-line: #d8ddd1;
+  background: #f5f1e3;
+  color: #22382a;
+  min-height: 100vh;
+  font-family: "DM Sans", Arial, sans-serif;
+}
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+  padding: 24px max(24px, calc((100% - 1392px) / 2));
+  background: var(--profile-paper);
+}
+.nav a, .nav span {
+  color: var(--profile-green);
+  border: 1px solid var(--profile-line);
+  border-radius: 24px;
+  padding: 10px 16px;
+  font-size: .8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.nav .brand { border: 0; padding-left: 0; min-width: min(31%, 390px); }
+.nav .current { color: white; background: var(--profile-green); border-color: var(--profile-green); }
+.nav [aria-disabled] { color: #5e6a60; }
+.main { max-width: 1440px; padding: 40px; }
+.intro { margin-bottom: 24px; }
+.intro h1 { font-size: clamp(2rem, 4vw, 2.75rem); line-height: 1.13; margin: 8px 0; }
+.intro p:last-child { margin: 0; max-width: 65ch; }
+.eyebrow { margin: 0; font-weight: 800; font-size: .75rem; letter-spacing: .08em; color: var(--profile-green); }
+.samples, .chips { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.samples { margin-bottom: 24px; }
+.page button {
+  font: inherit;
+  font-weight: 650;
+  font-size: .85rem;
+  color: var(--profile-green);
+  background: var(--profile-paper);
+  border: 1px solid var(--profile-line);
+  border-radius: 24px;
+  padding: 9px 13px;
+  cursor: pointer;
+}
+.page button[aria-pressed="true"] { border-color: var(--profile-green); background: #e5efdf; }
+.page button:disabled { color: #5e6a60; cursor: default; }
+.page :is(button, a, input, select, textarea):focus-visible { outline: 2px solid #357145; outline-offset: 3px; }
+.threeColumns, .twoColumns { display: grid; gap: 24px; margin-bottom: 24px; align-items: start; }
+.threeColumns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.twoColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.card, .actions { background: var(--profile-paper); border: 1px solid var(--profile-line); border-radius: 16px; padding: 24px; }
+.card h2, .actions h2 { font-size: 1.4rem; margin: 0 0 8px; }
+.card p, .actions p { font-size: .9rem; line-height: 1.5; color: #48594c; }
+.card label { display: grid; gap: 8px; font-size: .85rem; font-weight: 650; margin-top: 16px; }
+.card :is(input:not([type="range"]), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--profile-line);
+  background: white;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+  border-radius: 8px;
+  padding: 11px;
+}
+.card textarea { resize: vertical; }
+.card fieldset { border: 0; margin: 16px 0 0; padding: 0; min-width: 0; }
+.card legend { padding: 0; margin-bottom: 8px; font-size: .85rem; font-weight: 650; }
+.card input[type="range"] { width: 100%; margin: 0; accent-color: var(--profile-green); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.context { background: #edf1e6; padding: 14px; border-radius: 8px; margin-top: 16px; font-size: .85rem; }
+.context p { margin: 6px 0 0; }
+.context small, .chips + small { display: block; margin-top: 8px; }
+.rangeEnds { display: flex; justify-content: space-between; font-size: .75rem; }
+.card .weight { grid-template-columns: minmax(100px, 145px) minmax(0, 1fr) 1ch; align-items: center; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.actions p { margin-bottom: 0; }
+.actions button { background: var(--profile-green); color: white; padding: 12px 18px; }
+.result p { margin: 14px 0 0; }
+.result a { color: var(--profile-green); font-weight: 700; }
+@media (max-width: 990px) {
+  .threeColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .main { padding: 24px 16px; }
+  .nav { padding: 16px; gap: 8px; }
+  .nav .brand { width: 100%; }
+  .nav a, .nav span { padding: 8px 10px; }
+  .threeColumns, .twoColumns { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .card, .actions { padding: 18px; }
+}
