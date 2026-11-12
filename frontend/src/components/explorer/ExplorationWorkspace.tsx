@@ -6,7 +6,10 @@ import { NeighbourhoodDetailsPanel } from "./NeighbourhoodDetailsPanel";
 import type { BoundarySet, ExplorationSelection, NeighbourhoodProfile } from "./types";
 import styles from "./explorer.module.css";
 import { loadWorkspaceData, loadProfile, type Catalog } from "./data";
+import { MAPBOX_TOKEN } from "@/lib/mapbox";
+import { findAtSameLocation, loadBoundaries } from "@/lib/boundaries";
 
+const defaultNeighbourhoodId = (set: BoundarySet) => set.neighbourhoods.find(n => n.code === '1')?.id ?? set.neighbourhoods[0].id;
 type SavedPlace = { id: string; name: string; year: number; boundary: string };
 const savedKey = 'mcp-canada-saved-housing';
 function subscribeSaved(callback: () => void) {
@@ -40,8 +43,10 @@ export function ExplorationWorkspace({ renderMap }: {
   const [storageNotice, setStorageNotice] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
   const budgetAnchorHandled = useRef(false);
+  const switchAbort = useRef<AbortController | null>(null);
   const selectionKey = selection ? `${selection.geographyId}:${selection.year}` : '';
   const activeSet = sets.find(s => s.id === selection?.boundarySetId);
+  const selectedPlace = activeSet?.neighbourhoods.find(n => n.id === selection?.geographyId);
   const profile = result?.key === selectionKey ? result.profile : null;
   const error = profileError?.key === selectionKey ? profileError.message : '';
 
@@ -57,7 +62,7 @@ export function ExplorationWorkspace({ renderMap }: {
         setLoadError('No neighbourhood data is loaded. Import the published Census data to explore housing.');
         return;
       }
-      setSelection({ boundarySetId: current.id, geographyId: current.neighbourhoods.find(n => n.id === requestedId)?.id ?? current.neighbourhoods.find(n => n.code === '1')?.id ?? current.neighbourhoods[0].id, year: current.years.at(-1)! });
+      setSelection({ boundarySetId: current.id, geographyId: current.neighbourhoods.find(n => n.id === requestedId)?.id ?? defaultNeighbourhoodId(current), year: current.years.at(-1)! });
     }).catch(e => { if (!abort.signal.aborted) setLoadError(e.message); });
     return () => abort.abort();
   }, []);
@@ -87,6 +92,20 @@ export function ExplorationWorkspace({ renderMap }: {
     const set = sets.find(s => s.id === next.boundarySetId);
     if (set?.years.includes(next.year) && set.neighbourhoods.some(n => n.id === next.geographyId)) setSelection(next);
   }
+  /** Starts a new selection in another set at the same place on the map. Names and codes
+   * are never matched across sets, because they don't imply the areas are the same. */
+  async function switchBoundarySet(set: BoundarySet) {
+    if (!selection) return;
+    switchAbort.current?.abort();
+    const abort = switchAbort.current = new AbortController();
+    let geographyId = defaultNeighbourhoodId(set);
+    try {
+      const [source, target] = await Promise.all([loadBoundaries(selection.boundarySetId, abort.signal), loadBoundaries(set.id, abort.signal)]);
+      const match = findAtSameLocation(source, selection.geographyId, target)?.properties.geography_id;
+      if (match && set.neighbourhoods.some(n => n.id === match)) geographyId = match;
+    } catch { if (abort.signal.aborted) return; }
+    setSelection({ boundarySetId: set.id, geographyId, year: set.years.at(-1)! });
+  }
   const isSaved = !!profile && saved.some(s => s.id === profile.geography.id && s.year === profile.year);
   return <div className={styles.explorer}>
     <header className={styles.navigation}>
@@ -96,19 +115,22 @@ export function ExplorationWorkspace({ renderMap }: {
     </header>
     <main className={styles.workspace}>
       <section className={styles.mapArea} aria-label="Shared exploration map area">
-        <div className={styles.mapTopline}><span className={styles.kicker}>EXPLORE A NEIGHBOURHOOD</span><span className={styles.mapStatus}>{renderMap ? 'Map view' : 'Map integration pending'}</span></div>
-        {selection && activeSet && <div className={styles.locationControls}>
-          <label>Boundary set<select aria-label="Boundary set" value={selection.boundarySetId} onChange={e => {
-            const set = sets.find(s => s.id === e.target.value)!;
-            // Start an explicit new selection: names/codes never imply a crosswalk.
-            setSelection({ boundarySetId: set.id, geographyId: set.neighbourhoods[0].id, year: set.years.at(-1)! });
-          }}>{sets.map(s => <option key={s.id} value={s.id}>{s.label} neighbourhoods</option>)}</select></label>
+        {!renderMap && <div className={styles.mapTopline}><span className={styles.kicker}>EXPLORE A NEIGHBOURHOOD</span><span className={styles.mapStatus}>Map integration pending</span></div>}
+        {/* The map's search replaces this picker, but neither is available without a Mapbox token. */}
+        {(!renderMap || !MAPBOX_TOKEN) && selection && activeSet && <div className={styles.locationControls}>
           <label>Neighbourhood<select aria-label="Neighbourhood" value={selection.geographyId} onChange={e => setSelection({ ...selection, geographyId: e.target.value })}>{activeSet.neighbourhoods.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select></label>
         </div>}
         {loadError ? <div className={styles.mapMessage} role="alert"><h1>Data is unavailable</h1><p>{loadError}</p><button className={styles.secondaryButton} onClick={() => window.location.reload()}>Try again</button></div> : !selection ? <div className={styles.mapMessage} role="status">Loading neighbourhoods…</div> : renderMap ? <div className={styles.mapSlot}>{renderMap(selection, updateSelection)}</div> : <div className={styles.mapMessage}>
           <span className={styles.mapPlaceholderMark} aria-hidden="true">⌖</span><span className={styles.kicker}>A SPACE FOR EXPLORATION</span><h2>The map belongs here.</h2><p>Explore housing in the details panel.<br />The shared map will connect here when it is ready.</p><span className={styles.placeholderTag}>Housing data connected <span aria-hidden="true">✓</span></span>
         </div>}
-        {selection && activeSet && <div className={styles.mapBottom}><p className={styles.boundaryNote}>{activeSet.label} boundaries remain fixed while you change the year. A different boundary set starts a new selection.</p><CensusTimeline years={activeSet.years} year={selection.year} onYearChange={year => setSelection({ ...selection, year })} /></div>}
+        {selection && activeSet && <div className={styles.mapDock}>
+          <div className={styles.dockRow}>
+            <div className={styles.selectedCard}><span className={styles.rustKicker}>SELECTED PLACE</span><strong>{selectedPlace?.name}</strong><p>Neighbourhood {selectedPlace?.code} · {activeSet.label} boundaries stay fixed while you choose a year below.</p></div>
+            <button type="button" className={styles.acrossTime} onClick={() => document.getElementById('history-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Viewing this place across time</button>
+          </div>
+          <CensusTimeline years={activeSet.years} year={selection.year} onYearChange={year => setSelection({ ...selection, year })} controls={
+            <select aria-label="Boundary set" value={selection.boundarySetId} onChange={e => void switchBoundarySet(sets.find(s => s.id === e.target.value)!)}>{sets.map(s => <option key={s.id} value={s.id}>{s.label} neighbourhoods · {s.years.join(', ')}</option>)}</select>} />
+        </div>}
       </section>
       {profile ? <NeighbourhoodDetailsPanel profile={profile} income={income} budget={budget} onIncomeChange={setIncome} onBudgetChange={setBudget} saved={isSaved} limitReached={saved.length >= 5} onCompare={() => {
         if (!isSaved && saved.length < 5) savePlaces([...saved, { id: profile.geography.id, name: profile.geography.name, year: profile.year, boundary: profile.geography.boundary_set }]);

@@ -8,20 +8,26 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { MAPBOX_TOKEN, TORONTO_BBOX, TORONTO_CENTER, type Place } from "@/lib/mapbox";
 import { boundsOf, type Boundaries } from "@/lib/boundaries";
+import styles from "./MapView.module.css";
 
 type Props = {
   selected: Place | null;
   boundaries?: Boundaries | null;
   selectedGeographyId?: string;
   onGeographyClick?: (geographyId: string) => void;
+  onPlaceDismiss?: () => void;
+  // Mapbox Standard basemap options, toggled by the layer chips.
+  show3dObjects?: boolean;
+  showTransit?: boolean;
   className?: string;
 };
 
 const SOURCE = "neighbourhoods";
+const HOME = { center: TORONTO_CENTER, zoom: 11, pitch: 45, bearing: -17 };
 const EMPTY: Boundaries = { type: "FeatureCollection", features: [] };
 const isSelected = (id: string) => ["==", ["get", "geography_id"], id];
 
-export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, className }: Props) {
+export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -31,7 +37,10 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
   // A neighbourhood picked on the map is already in view, so the camera stays put.
   const clickedIdRef = useRef<string | null>(null);
 
+  const dismissRef = useRef(onPlaceDismiss);
+
   useEffect(() => { clickRef.current = onGeographyClick; }, [onGeographyClick]);
+  useEffect(() => { dismissRef.current = onPlaceDismiss; }, [onPlaceDismiss]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -40,18 +49,21 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       container: containerRef.current,
       // Standard style includes 3D buildings and landmarks out of the box.
       style: "mapbox://styles/mapbox/standard",
-      center: TORONTO_CENTER,
-      zoom: 11,
-      pitch: 45,
-      bearing: -17,
+      ...HOME,
       maxBounds: [
         [TORONTO_BBOX[0] - 0.3, TORONTO_BBOX[1] - 0.2],
         [TORONTO_BBOX[2] + 0.3, TORONTO_BBOX[3] + 0.2],
       ],
     });
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
     mapRef.current = map;
+    // Only the place popup has a close button. Popup "close" events can't be used:
+    // they also fire when the user clicks elsewhere on the map.
+    const container = map.getContainer();
+    const onContainerClick = (event: MouseEvent) => {
+      if ((event.target as Element).closest(".mapboxgl-popup-close-button")) dismissRef.current?.();
+    };
+    container.addEventListener("click", onContainerClick);
 
     map.on("load", () => {
       map.addSource(SOURCE, { type: "geojson", data: EMPTY });
@@ -86,6 +98,7 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     });
 
     return () => {
+      container.removeEventListener("click", onContainerClick);
       markerRef.current = null;
       mapRef.current = null;
       map.remove();
@@ -105,14 +118,23 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     clickedIdRef.current = null;
     const feature = boundaries?.features.find((f) => f.properties.geography_id === selectedGeographyId);
     if (fromClick) return;
-    // Extra top/bottom padding keeps the shape clear of the workspace's selects and timeline.
-    if (feature) map.fitBounds(boundsOf(feature.geometry), { padding: { top: 200, bottom: 300, left: 60, right: 60 }, maxZoom: 14, pitch: 45 });
+    // Extra top/right padding keeps the shape clear of the overlays on the map.
+    if (feature) map.fitBounds(boundsOf(feature.geometry), { padding: { top: 170, bottom: 60, left: 60, right: 90 }, maxZoom: 14, pitch: 45 });
   }, [ready, boundaries, selectedGeographyId]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !selected) return;
+    if (!ready || !map) return;
+    map.setConfigProperty("basemap", "show3dObjects", show3dObjects);
+    map.setConfigProperty("basemap", "showTransitLabels", showTransit);
+  }, [ready, show3dObjects, showTransit]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
     markerRef.current?.remove();
+    markerRef.current = null;
+    if (!selected) return;
     markerRef.current = new mapboxgl.Marker({ color: "#2f5d3a" })
       .setLngLat(selected.coordinates)
       .setPopup(new mapboxgl.Popup({ offset: 24 }).setText(selected.address || selected.name))
@@ -121,5 +143,13 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     map.flyTo({ center: selected.coordinates, zoom: 15.5, pitch: 60, essential: true });
   }, [selected]);
 
-  return <div ref={containerRef} className={className} aria-label="Map of Toronto" role="region" />;
+  return <div className={className}>
+    <div ref={containerRef} className={styles.canvas} aria-label="Map of Toronto" role="region" />
+    <div className={styles.controls} role="group" aria-label="Map controls">
+      <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => mapRef.current?.zoomIn()}>+</button>
+      <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => mapRef.current?.zoomOut()}>−</button>
+      <button type="button" aria-label="Reset rotation" title="Reset rotation" onClick={() => mapRef.current?.easeTo({ bearing: HOME.bearing, pitch: HOME.pitch })}>↻</button>
+      <button type="button" aria-label="Show all of Toronto" title="Show all of Toronto" onClick={() => mapRef.current?.flyTo({ ...HOME, essential: true })}>⌂</button>
+    </div>
+  </div>;
 }
