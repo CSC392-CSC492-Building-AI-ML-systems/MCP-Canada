@@ -86,8 +86,8 @@
   },
   "osm-groceries.json": {
     "url": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A45%5D%3Bnwr%5B%22shop%22~%22%5E%28supermarket%7Cconvenience%7Cgreengrocer%29%24%22%5D%2843.58%2C-79.65%2C43.86%2C-79.11%29%3Bout+center+tags%3B",
-    "retrieved_at": "2026-11-12T04:22:53.284779+00:00",
-    "sha256": "de734af072b0da7d0a41d770c5e5bfda75e7c872af4c1bf24a27d3f81899837c"
+    "live": true,
+    "note": "Live Overpass query: every answer contains the current OSM database timestamp, so the bytes differ on each request and no sha256 is pinned here. --download saves the newest copy in data/raw/ and records its sha256 and retrieved_at in data/raw/osm-groceries.json.meta.json; later runs reuse that copy, and --refresh osm-groceries.json replaces it. Overpass is often busy (HTTP 502/504): the script retries, and if it still fails, just run --download again. The app never downloads at runtime."
   },
   "parks.zip": {
     "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/2aac8903-23ff-4072-ab72-b76cac44ad89/resource/9f53c253-a47e-497f-8a07-528f7d7aad90/download/parks-wgs84.zip",

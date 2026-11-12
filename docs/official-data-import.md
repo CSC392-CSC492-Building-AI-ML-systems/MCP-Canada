@@ -28,9 +28,15 @@ printed at the end. Busy-server answers (HTTP 429/502/503/504) and timeouts are
 retried after 10, 30 and 60 seconds. After reviewing a changed source, accept the
 new snapshot with `--download --refresh <file>` (repeatable): it downloads that
 file again and records its new SHA-256 and `retrieved_at` in
-`data/official-sources.json`. The OpenStreetMap (Overpass) answer includes its
-database timestamp, so its bytes differ on every request and a fresh download
-always needs `--refresh osm-groceries.json`. Requests send the User-Agent
+`data/official-sources.json`.
+
+Sources marked `"live": true` have no pinned digest, because their bytes differ on
+every request. Currently this is only OpenStreetMap (Overpass), whose answer
+includes its database timestamp. `--download` saves the newest copy in `data/raw/`
+and writes its SHA-256 and `retrieved_at` to `data/raw/<file>.meta.json`, which the
+normalizer uses as the source's release and retrieval date. Later runs reuse the
+saved copy; `--refresh <file>` replaces it and updates only the `.meta.json`.
+Teammates' live snapshots can therefore differ. Requests send the User-Agent
 `MCP-Canada-student-project/0.1`, because Overpass rejects Python's default one
 with HTTP 406. The
 normalizer derives release IDs from file checksums, so a new reviewed snapshot is

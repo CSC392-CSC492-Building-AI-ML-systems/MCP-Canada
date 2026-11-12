@@ -41,6 +41,30 @@ def fetch(url):
                 raise
 
 
+def live_meta_path(raw_dir, name):
+    return raw_dir / f'{name}.meta.json'
+
+
+def save_live_meta(raw_dir, name, item):
+    meta = dict(sha256=item['sha256'], retrieved_at=item['retrieved_at'])
+    live_meta_path(raw_dir, name).write_text(json.dumps(meta, indent=2) + '\n')
+
+
+def load_live_meta(raw_dir, name, item):
+    """Fill item's sha256/retrieved_at from the local snapshot of a live source."""
+    path, meta_path = raw_dir / name, live_meta_path(raw_dir, name)
+    if not path.exists():
+        return
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    if meta.get('sha256') != digest:
+        # No (matching) record of this copy: date it by the file's modification time.
+        modified = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+        meta = dict(sha256=digest, retrieved_at=modified)
+        save_live_meta(raw_dir, name, meta)
+    item.update(sha256=meta['sha256'], retrieved_at=meta['retrieved_at'])
+
+
 def number(raw):
     if raw is None or str(raw).strip() == '':
         return None, 'missing'
@@ -350,7 +374,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--download',action='store_true',help='Fetch exact pinned snapshots; skip and report files whose bytes changed')
     parser.add_argument('--refresh',action='append',default=[],metavar='FILE',
-        help='With --download: re-download FILE (e.g. ttc-merged.zip) and record its new sha256 and retrieved_at in official-sources.json. Repeatable.')
+        help='With --download: re-download FILE (e.g. ttc-merged.zip) and record its new sha256 and retrieved_at in official-sources.json (for a live source, in its local .meta.json). Repeatable.')
     parser.add_argument('--raw-dir',type=Path,default=ROOT/'data/raw')
     parser.add_argument('--output',type=Path,default=ROOT/'data/normalized/official.json')
     args=parser.parse_args()
@@ -360,6 +384,11 @@ def main():
     if unknown:parser.error(f'--refresh: not in official-sources.json: {", ".join(unknown)}')
     if args.refresh and not args.download:parser.error('--refresh needs --download')
     args.raw_dir.mkdir(parents=True,exist_ok=True)
+    # Live sources (e.g. Overpass/OSM) change on every request, so no checksum is pinned in
+    # official-sources.json. The local copy in raw_dir is the snapshot; its sha256 and
+    # retrieved_at are kept next to it in <file>.meta.json (ignored with data/raw/).
+    for name,item in manifest.items():
+        if item.get('live'):load_live_meta(args.raw_dir,name,item)
     if args.download:
         failed={}
         for name,item in manifest.items():
@@ -374,6 +403,16 @@ def main():
                 failed[name]=f'download failed: {error}'
                 continue
             digest=hashlib.sha256(data).hexdigest()
+            if item.get('live'):
+                if name.endswith('.json') and 'remark' in json.loads(data):
+                    failed[name]='incomplete response from server (has a "remark"); try again later'
+                    continue
+                path.write_bytes(data)
+                item['sha256']=digest
+                item['retrieved_at']=datetime.now(timezone.utc).isoformat()
+                save_live_meta(args.raw_dir,name,item)
+                print(f'  saved live snapshot of {name} (sha256 {digest[:12]}...)')
+                continue
             if refresh and digest!=item['sha256']:
                 # Record the new snapshot instead of silently replacing the old one.
                 print(f'  new snapshot of {name}: sha256 {item["sha256"][:12]}... -> {digest[:12]}...')
