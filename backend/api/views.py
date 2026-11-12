@@ -1,4 +1,3 @@
-from django.db.models import Count
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from .comparison_services import Budget
@@ -122,7 +121,30 @@ def comparison(request):
             {"error": "Provide a source_id and between 1 and 20 indicator_ids."},
             status=400,
         )
+    if budget:
+        if (
+            budget.get_monthly_income() is not None
+            and budget.get_monthly_income() < 0
+        ):
+            return JsonResponse(
+                {"error": "Income cannot be negative."},
+                status=400,
+            )
 
+        if (
+            budget.get_monthly_rent() is not None
+            and budget.get_monthly_rent() < 0
+        ):
+            return JsonResponse(
+                {"error": "Rent budget cannot be negative."},
+                status=400,
+            )
+
+        if budget.get_bedrooms() not in range(0, 6):
+            return JsonResponse(
+                {"error": "Bedrooms must be between 0 and 5."},
+                status=400,
+            )
     
     historical_source_ids = {
         "census-2001-csv-8d3542c5b0",
@@ -195,27 +217,10 @@ def comparison(request):
         "value",
         "status",
     )
-    # Toronto CMA average rent matching the selected Census snapshot.
+
     housing_rent = None
 
-    # Identify the selected Census year from its source.
-    census_year_by_source = {
-        "census-2001-csv-8d3542c5b0": 2001,
-        "census-2006-csv-f5eaa4478e": 2006,
-        "census-2011-csv-2fc83b4b8e": 2011,
-        "census-2016-csv-9d45a882dd": 2016,
-        "census-2021-xlsx-9a3c372907": 2021,
-}
-
-    census_year = census_year_by_source.get(source_id)
-
-    # Historical CMHC rent is currently available for the 2021 snapshot.
-    rent_reference_years = {
-        2021: 2021,
-}
-    rent_reference_year = rent_reference_years.get(census_year)
-
-    if budget and rent_reference_year is not None:
+    if budget:
         bedroom_categories = {
             0: "studio",
             1: "1",
@@ -229,24 +234,22 @@ def comparison(request):
             budget.get_bedrooms(), "1"
         )
 
-        rent_observation = (
-            Observation.objects
-            .filter(
-                geography__name="Toronto CMA",
-                geography__geography_set__kind="cma",
-                indicator_id=f"cmhc-2021-apartment-rent-{bedroom_category}",
-                reference_year=rent_reference_year,
-                status="observed",
-            )
-            .first()
-        )
+        rent_observation = Observation.objects.filter(
+            source_id="cmhc-toronto-2025-xlsx-99ad5966be",
+            geography__name="Toronto CMA",
+            geography__geography_set__kind="cma",
+            indicator_id=f"cmhc-2025-apartment-rent-{bedroom_category}",
+            reference_year=2025,
+            status="observed",
+        ).first()
 
         if rent_observation:
             housing_rent = {
-                "value": str(rent_observation.value),
-                "bedrooms": bedroom_category,
-                "reference_year": rent_observation.reference_year,
-                "geography": "Toronto CMA",}
+                "value": float(rent_observation.value),
+                "bedrooms": budget.get_bedrooms(),
+                "reference_year": 2025,
+                "geography": "Toronto CMA",
+            }
 
 
     return JsonResponse({
@@ -278,6 +281,38 @@ def boundaries(request):
         "features": [
             {"type": "Feature", "geometry": row["geometry"],
              "properties": {"geography_id": row["id"], "code": row["code"], "name": row["name"]}}
+            for row in rows
+        ],
+    })
+
+@require_GET
+def boundaries(request):
+    """Return one boundary set as a GeoJSON FeatureCollection."""
+    geography_set_id = request.GET.get("geography_set_id", "").strip()
+
+    if not geography_set_id:
+        return JsonResponse(
+            {"error": "Required query parameter: geography_set_id"},
+            status=400,
+        )
+
+    rows = Geography.objects.filter(
+        geography_set_id=geography_set_id,
+        geometry__isnull=False,
+    ).order_by("code").values("id", "code", "name", "geometry")
+
+    return JsonResponse({
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": row["geometry"],
+                "properties": {
+                    "geography_id": row["id"],
+                    "code": row["code"],
+                    "name": row["name"],
+                },
+            }
             for row in rows
         ],
     })
