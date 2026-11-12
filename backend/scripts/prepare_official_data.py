@@ -1,12 +1,15 @@
 """Prepare checked official snapshots; use from repo root. Never infer missing data."""
 import argparse
 import csv
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import io
 import json
 from pathlib import Path
 import re
+import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -14,6 +17,28 @@ import openpyxl
 import shapefile
 
 ROOT = Path(__file__).resolve().parents[2]
+USER_AGENT = 'MCP-Canada-student-project/0.1'
+RETRY_STATUSES = {429, 502, 503, 504}
+RETRY_WAITS = [10, 30, 60]
+
+
+def fetch(url):
+    """Download url; retry when the server is busy (e.g. Overpass 502/504)."""
+    # Some servers (e.g. Overpass for OSM) reject Python's default User-Agent with HTTP 406.
+    request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+    for attempt, wait in enumerate([0] + RETRY_WAITS):
+        if wait:
+            print(f'  server busy; retrying in {wait}s (attempt {attempt + 1})', flush=True)
+            time.sleep(wait)
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            if error.code not in RETRY_STATUSES or attempt == len(RETRY_WAITS):
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == len(RETRY_WAITS):
+                raise
 
 
 def number(raw):
@@ -323,20 +348,43 @@ def build(raw_dir, manifest):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--download',action='store_true',help='Fetch exact pinned snapshots; fail on changed bytes')
+    parser.add_argument('--download',action='store_true',help='Fetch exact pinned snapshots; skip and report files whose bytes changed')
+    parser.add_argument('--refresh',action='append',default=[],metavar='FILE',
+        help='With --download: re-download FILE (e.g. ttc-merged.zip) and record its new sha256 and retrieved_at in official-sources.json. Repeatable.')
     parser.add_argument('--raw-dir',type=Path,default=ROOT/'data/raw')
     parser.add_argument('--output',type=Path,default=ROOT/'data/normalized/official.json')
     args=parser.parse_args()
-    manifest=json.loads((ROOT/'data/official-sources.json').read_text())
+    manifest_path=ROOT/'data/official-sources.json'
+    manifest=json.loads(manifest_path.read_text())
+    unknown=[name for name in args.refresh if name not in manifest]
+    if unknown:parser.error(f'--refresh: not in official-sources.json: {", ".join(unknown)}')
+    if args.refresh and not args.download:parser.error('--refresh needs --download')
     args.raw_dir.mkdir(parents=True,exist_ok=True)
     if args.download:
+        failed={}
         for name,item in manifest.items():
             path=args.raw_dir/name
-            if path.exists():continue
-            with urllib.request.urlopen(item['url'],timeout=120) as response:data=response.read()
-            if hashlib.sha256(data).hexdigest()!=item['sha256']:
-                raise ValueError(f'Upstream changed {name}; review a new snapshot instead of overwriting provenance')
+            refresh=name in args.refresh
+            if path.exists() and not refresh:continue
+            print(f'Downloading {name}...',flush=True)
+            try:
+                data=fetch(item['url'])
+            except Exception as error:
+                # Report and keep going, so one bad file does not stop the files after it.
+                failed[name]=f'download failed: {error}'
+                continue
+            digest=hashlib.sha256(data).hexdigest()
+            if refresh and digest!=item['sha256']:
+                # Record the new snapshot instead of silently replacing the old one.
+                print(f'  new snapshot of {name}: sha256 {item["sha256"][:12]}... -> {digest[:12]}...')
+                item['sha256']=digest
+                item['retrieved_at']=datetime.now(timezone.utc).isoformat()
+                manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
+            elif digest!=item['sha256']:
+                failed[name]=f'upstream changed; check it, then rerun with --refresh {name}'
+                continue
             path.write_bytes(data)
+        for name,reason in failed.items():print(f'SKIPPED {name}: {reason}')
     bundle=build(args.raw_dir,manifest)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(bundle,ensure_ascii=False,separators=(',',':')))
