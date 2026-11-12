@@ -5,6 +5,26 @@ normalized bundles live in ignored `data/normalized/`. These are local data, not
 Git-tracked seed fixtures. `data/official-sources.json` records the exact public
 URLs, retrieval timestamps and SHA-256 digests. No API key is required.
 
+## Census-only local setup
+
+To populate the map and housing timeline without downloading CMHC or amenity feeds,
+run these commands from the repository root:
+
+```sh
+backend/.venv/bin/python backend/manage.py migrate
+backend/.venv/bin/python backend/scripts/prepare_official_data.py --census-only --download --output data/normalized/census.json
+backend/.venv/bin/python backend/manage.py import_dataset data/normalized/census.json --dry-run
+backend/.venv/bin/python backend/manage.py import_dataset data/normalized/census.json
+backend/.venv/bin/python backend/manage.py data_inventory
+```
+
+The seven pinned files provide 298 versioned neighbourhood polygons, 184 indicator
+definitions, 26,696 measurement records and 9,206 staged source rows. Refresh
+`/housing/` after importing. The timeline shows 2021 for Current 158 boundaries;
+choose Historical 140 in its boundary selector to explore 2001, 2006, 2011 and
+2016. Changing the year updates the selected Census data, not the present-day
+Mapbox imagery. Missing and suppressed source cells remain unavailable.
+
 ## Reproduce from the saved files
 
 After installing backend requirements and activating your own virtual environment:

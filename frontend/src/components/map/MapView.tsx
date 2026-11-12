@@ -37,10 +37,13 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
   const [ready, setReady] = useState(false);
+  const [mapError, setMapError] = useState("");
+  const [flat, setFlat] = useState(false);
   // The load handler is registered once, so it reads the latest callback from a ref.
   const clickRef = useRef(onGeographyClick);
   // A neighbourhood picked on the map is already in view, so the camera stays put.
   const clickedIdRef = useRef<string | null>(null);
+  const flatRef = useRef(false);
 
   const dismissRef = useRef(onPlaceDismiss);
 
@@ -49,18 +52,42 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
 
   useEffect(() => {
     if (!containerRef.current) return;
+    if (!mapboxgl.supported()) {
+      // Mapbox capability detection is an external initialization failure.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMapError("This browser cannot display the 3D map. Enable hardware acceleration or try another browser.");
+      return;
+    }
     mapboxgl.accessToken = MAPBOX_TOKEN;
-    const map = new mapboxgl.Map({
-      container: containerRef.current,
-      // Standard style includes 3D buildings and landmarks out of the box.
-      style: "mapbox://styles/mapbox/standard",
-      ...HOME,
-      interactive: !preview,
-      maxBounds: [
-        [TORONTO_BBOX[0] - 0.3, TORONTO_BBOX[1] - 0.2],
-        [TORONTO_BBOX[2] + 0.3, TORONTO_BBOX[3] + 0.2],
-      ],
-    });
+    let map: mapboxgl.Map;
+    try {
+      map = new mapboxgl.Map({
+        container: containerRef.current,
+        // Standard style includes 3D buildings and landmarks out of the box.
+        style: "mapbox://styles/mapbox/standard",
+        ...HOME,
+        interactive: !preview,
+        maxBounds: [
+          [TORONTO_BBOX[0] - 0.3, TORONTO_BBOX[1] - 0.2],
+          [TORONTO_BBOX[2] + 0.3, TORONTO_BBOX[3] + 0.2],
+        ],
+      });
+    } catch {
+      setMapError("The map could not start. Reload the page to try again.");
+      return;
+    }
+    const onError = (event: mapboxgl.ErrorEvent) => {
+      const status = (event.error as Error & { status?: number }).status;
+      if (status === 401 || status === 403) {
+        setMapError("Map access was denied. Check your Mapbox public token and its allowed website URLs.");
+      } else if (!map.isStyleLoaded()) {
+        setMapError("The map could not load. Check your connection and reload to try again.");
+      }
+    };
+    map.on("error", onError);
+    // The workspace can resize independently of the browser (panels, mobile layout).
+    const resize = new ResizeObserver(() => map.resize());
+    resize.observe(containerRef.current);
     if (!preview) map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
     mapRef.current = map;
     // Only the place popup has a close button. Popup "close" events can't be used:
@@ -100,10 +127,12 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
         map.getCanvas().style.cursor = "";
         hoverLabel.remove();
       });
+      setMapError("");
       setReady(true);
     });
 
     return () => {
+      resize.disconnect();
       container.removeEventListener("click", onContainerClick);
       markerRef.current = null;
       mapRef.current = null;
@@ -124,7 +153,15 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     clickedIdRef.current = null;
     const feature = boundaries?.features.find((f) => f.properties.geography_id === selectedGeographyId);
     if (fromClick) return;
-    if (feature) map.fitBounds(boundsOf(feature.geometry), preview ? PREVIEW_FIT : FIT);
+    if (feature) {
+      const fit = preview ? PREVIEW_FIT : FIT;
+      const narrow = map.getContainer().clientWidth < 900;
+      map.fitBounds(boundsOf(feature.geometry), {
+        ...fit,
+        padding: !preview && narrow ? { top: 230, bottom: 45, left: 24, right: 70 } : fit.padding,
+        pitch: flatRef.current ? 0 : fit.pitch,
+      });
+    }
   }, [ready, boundaries, selectedGeographyId, preview]);
 
   useEffect(() => {
@@ -145,17 +182,25 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       .setPopup(new mapboxgl.Popup({ offset: 24 }).setText(selected.address || selected.name))
       .addTo(map)
       .togglePopup();
-    map.flyTo({ center: selected.coordinates, zoom: 15.5, pitch: 60, essential: true });
-  }, [selected]);
+    map.flyTo({ center: selected.coordinates, zoom: 15.5, pitch: flatRef.current ? 0 : 60, essential: true });
+  }, [selected, ready]);
 
   return <div className={className}>
     <div ref={containerRef} className={styles.canvas} aria-label="Map of Toronto" role="region" />
+    {mapError ? <div className={styles.status} role="alert"><strong>Map unavailable</strong><p>{mapError}</p><button type="button" onClick={() => window.location.reload()}>Try again</button></div>
+      : !ready && <div className={styles.loading} role="status">Loading the map…</div>}
     {/* The landing preview is display-only, so it has no controls. */}
     {!preview && <div className={styles.controls} role="group" aria-label="Map controls">
       <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => mapRef.current?.zoomIn()}>+</button>
       <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => mapRef.current?.zoomOut()}>−</button>
-      <button type="button" aria-label="Reset rotation" title="Reset rotation" onClick={() => mapRef.current?.easeTo({ bearing: HOME.bearing, pitch: HOME.pitch })}>↻</button>
-      <button type="button" aria-label="Show all of Toronto" title="Show all of Toronto" onClick={() => mapRef.current?.flyTo({ ...HOME, essential: true })}>⌂</button>
+      <button type="button" aria-label="Reset rotation" title="Reset rotation" onClick={() => mapRef.current?.easeTo({ bearing: HOME.bearing, pitch: flat ? 0 : HOME.pitch })}>↻</button>
+      <button type="button" aria-label="Show all of Toronto" title="Show all of Toronto" onClick={() => mapRef.current?.flyTo({ ...HOME, pitch: flat ? 0 : HOME.pitch, essential: true })}>⌂</button>
+      <button type="button" aria-label={flat ? "Switch to 3D view" : "Switch to 2D view"} aria-pressed={!flat} title={flat ? "Switch to 3D view" : "Switch to 2D view"} onClick={() => {
+        const next = !flat;
+        flatRef.current = next;
+        setFlat(next);
+        mapRef.current?.easeTo({ pitch: next ? 0 : 60, duration: 600 });
+      }}>{flat ? "3D" : "2D"}</button>
     </div>}
   </div>;
 }

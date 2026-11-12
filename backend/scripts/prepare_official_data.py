@@ -39,7 +39,7 @@ def name_key(name):
     return re.sub('[^a-z0-9]', '', re.sub(r'\s*\(\d+\)$', '', name).lower())
 
 
-def build(raw_dir, manifest):
+def build(raw_dir, manifest, census_only=False):
     out = {x: [] for x in ['sources','geography_sets','geographies','indicators','observations','places','source_rows']}
     releases = {}
     def source(filename, publisher, title, coverage, licence='Catalogue licence not specified; verify source terms before redistribution', notes=''):
@@ -145,6 +145,8 @@ def build(raw_dir, manifest):
             for i,gid in enumerate(columns):
                 observe(sid,gid,iid,ref,'annual',row[i+offset],f'{"hd2021_census_profile" if year==2021 else "csv"}!row={n};column={i+offset+1}',year,
                         'Source-defined measure; no cross-boundary harmonization. See source row context.')
+    if census_only:
+        return out
     # National CPI, not Toronto neighbourhood inflation.
     sid=source('cpi.json','Bank of Canada / Statistics Canada','Total CPI V41690973','Canada – national',
         'Bank of Canada Valet terms: https://www.bankofcanada.ca/terms/; Statistics Canada attribution')
@@ -323,6 +325,7 @@ def build(raw_dir, manifest):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--census-only',action='store_true',help='Prepare only neighbourhood boundaries and the five Census profiles')
     parser.add_argument('--download',action='store_true',help='Fetch exact pinned snapshots; fail on changed bytes')
     parser.add_argument('--raw-dir',type=Path,default=ROOT/'data/raw')
     parser.add_argument('--output',type=Path,default=ROOT/'data/normalized/official.json')
@@ -331,13 +334,14 @@ def main():
     args.raw_dir.mkdir(parents=True,exist_ok=True)
     if args.download:
         for name,item in manifest.items():
+            if args.census_only and not name.startswith(("boundaries-", "census-")):continue
             path=args.raw_dir/name
             if path.exists():continue
             with urllib.request.urlopen(item['url'],timeout=120) as response:data=response.read()
             if hashlib.sha256(data).hexdigest()!=item['sha256']:
                 raise ValueError(f'Upstream changed {name}; review a new snapshot instead of overwriting provenance')
             path.write_bytes(data)
-    bundle=build(args.raw_dir,manifest)
+    bundle=build(args.raw_dir,manifest,census_only=args.census_only)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(bundle,ensure_ascii=False,separators=(',',':')))
     print(json.dumps({k:len(v) for k,v in bundle.items()},indent=2))
