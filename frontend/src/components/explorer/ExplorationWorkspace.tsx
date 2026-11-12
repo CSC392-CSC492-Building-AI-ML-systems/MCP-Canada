@@ -28,6 +28,25 @@ export function ExplorationWorkspace({ renderMap }: {
   const [profileError, setProfileError] = useState<{ key: string; message: string } | null>(null);
   const [income, setIncome] = useState('');
   const [budget, setBudget] = useState('');
+  useEffect(() => {
+    const saved = localStorage.getItem("mcp-canada-budget-preferences");
+
+    if (saved) {
+      const preferences = JSON.parse(saved);
+
+      setIncome(
+        preferences.before_tax_income != null
+          ? String(preferences.before_tax_income * 12)
+          : ""
+      );
+
+      setBudget(
+        preferences.monthly_rent != null
+          ? String(preferences.monthly_rent)
+          : ""
+      );
+    }
+  }, []);
   const storedSaved = useSyncExternalStore(subscribeSaved, readSaved, () => '[]');
   const [sessionSaved, setSessionSaved] = useState<SavedPlace[] | null>(null);
   const saved = useMemo(() => {
@@ -74,7 +93,7 @@ export function ExplorationWorkspace({ renderMap }: {
 
   useEffect(() => {
     if (profile && !budgetAnchorHandled.current && window.location.hash === '#budget-title') {
-      document.getElementById('budget-title')?.scrollIntoView({block:'center'});
+      document.getElementById('budget-title')?.scrollIntoView({ block: 'center' });
       budgetAnchorHandled.current = true;
     }
   }, [profile]);
@@ -115,16 +134,16 @@ export function ExplorationWorkspace({ renderMap }: {
       }} /> : <aside className={styles.detailsPanel}><div className={styles.panelScroll} role={error ? 'alert' : 'status'}><span className={styles.kicker}>NEIGHBOURHOOD DETAILS</span><h2>{error ? 'Could not load this selection' : loadError ? 'Waiting for published data' : 'Loading housing data…'}</h2><p>{error || loadError || 'Finding the selected Census period and its sources.'}</p>{error && <button className={styles.secondaryButton} onClick={() => setSelection(s => s ? { ...s } : null)}>Try again</button>}</div></aside>}
     </main>
     <dialog className={styles.savedDialog} ref={dialog} aria-labelledby="saved-title"><div className={styles.dialogHeading}><h2 id="saved-title">Saved for comparison</h2><button autoFocus type="button" aria-label="Close saved places" onClick={() => dialog.current?.close()}>×</button></div><p>Up to five places. The shared comparison view will use these selections.</p>{storageNotice && <p role="status">{storageNotice}</p>}{saved.length === 0 ? <p>No places saved yet. Choose “Add to compare” in the details panel.</p> : <ul>{saved.map(place => <li key={`${place.id}:${place.year}`}><div><strong>{place.name}</strong><span>{place.year} Census · {place.boundary}</span></div><button type="button" aria-label={`Remove ${place.name} ${place.year}`} onClick={() => savePlaces(saved.filter(s => s !== place))}>Remove</button></li>)}</ul>}<div>
-  <Link href="/comparison/" className={styles.primaryButton}>
-    Compare saved places →
-  </Link>
-  <button
-    type="button"
-    className={styles.secondaryButton}
-    onClick={() => dialog.current?.close()}
-  >
-    Continue exploring
-  </button>
-</div></dialog>
+      <Link href="/comparison/" className={styles.primaryButton}>
+        Compare saved places →
+      </Link>
+      <button
+        type="button"
+        className={styles.secondaryButton}
+        onClick={() => dialog.current?.close()}
+      >
+        Continue exploring
+      </button>
+    </div></dialog>
   </div>;
 }

@@ -10,7 +10,7 @@
 
 .main {
   min-width: 0;
-  padding: 14px 18px 24px;
+  padding: 10px 10px 20px;
 }
 
 .eyebrow {
@@ -21,21 +21,22 @@
 }
 
 .main h1 {
-  font-size: 21px;
-  margin: 0 0 15px;
+  font-size: 30px;
+  font-weight: 600;
+  margin: 0 0 12px;
 }
 
 .subtitle {
-  font-size: 10px;
+  font-size: 14px;
   color: #74766b;
   margin-bottom: 18px;
 }
 
 .controls {
   display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: 9px;
-  margin-bottom: 13px;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .period,
@@ -69,7 +70,7 @@
 .note {
   font-size: 8px;
   color: #727467;
-  margin: 0 0 12px;
+  margin: 0 0 9px;
 }
 
 .comparison {
@@ -91,6 +92,9 @@
   padding: 0 10px 9px;
   border-bottom: 1px solid #e5e0cf;
 }
+.neighbourhoods::before {
+  content: "";
+}
 
 .place {
   min-width: 0;
@@ -105,7 +109,7 @@
 .place > span,
 .place small {
   display: block;
-  font-size: 7px;
+  font-size: 8px;
   color: #77776b;
   margin-bottom: 3px;
 }
@@ -219,25 +223,28 @@
 .tableWrap table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 9px;
 }
 
 .tableWrap th,
 .tableWrap td {
-  padding: 8px 9px;
+  padding: 7px 8px;
   border-bottom: 1px solid #e5e0cf;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  vertical-align: top;
 }
 
 .tableWrap th {
-  width: 23%;
+  width: 34%;
   font-weight: normal;
   color: #747467;
 }
 
 .tableWrap td {
-  width: 25.6%;
+  width: 22%;
 }
 
 .tableWrap tr:last-child th,
@@ -245,7 +252,7 @@
   border-bottom: none;
 }
 
-.best {
+.bestValue {
   background: #e5ebdc;
   color: #285d3d;
   font-weight: bold;
@@ -260,8 +267,8 @@
 .sidebar {
   min-width: 0;
   min-height: 100vh;
-  background: #fbfaf5;
-  border-left: 3px solid #238dff;
+  background: #f3f0e3;
+  border-left: 1px solid #ded9c5;
 }
 
 /* Smaller screens */

@@ -1,6 +1,7 @@
 from django.db.models import Count
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
+from .comparison_services import Budget
 
 from .models import (
     Geography,
@@ -91,6 +92,25 @@ def comparison(request):
     ))
     source_id = request.GET.get("source_id", "").strip()
 
+    try:
+        income = request.GET.get("before_tax_income")
+        rent = request.GET.get("monthly_rent")
+        bedrooms = request.GET.get("bedrooms")
+
+        budget = None
+
+        if income is not None or rent is not None or bedrooms is not None:
+            budget = Budget(
+                before_tax_income=float(income) if income else None,
+                monthly_rent=float(rent) if rent else None,
+                bedrooms=int(bedrooms) if bedrooms else 0,
+            )
+
+    except (ValueError, TypeError):
+        return JsonResponse(
+            {"error": "Invalid budget preferences."},
+            status=400,
+        )
     if not 3 <= len(geography_ids) <= 5:
         return JsonResponse(
             {"error": "Select between 3 and 5 neighbourhoods."},
@@ -175,6 +195,59 @@ def comparison(request):
         "value",
         "status",
     )
+    # Toronto CMA average rent matching the selected Census snapshot.
+    housing_rent = None
+
+    # Identify the selected Census year from its source.
+    census_year_by_source = {
+        "census-2001-csv-8d3542c5b0": 2001,
+        "census-2006-csv-f5eaa4478e": 2006,
+        "census-2011-csv-2fc83b4b8e": 2011,
+        "census-2016-csv-9d45a882dd": 2016,
+        "census-2021-xlsx-9a3c372907": 2021,
+}
+
+    census_year = census_year_by_source.get(source_id)
+
+    # Historical CMHC rent is currently available for the 2021 snapshot.
+    rent_reference_years = {
+        2021: 2021,
+}
+    rent_reference_year = rent_reference_years.get(census_year)
+
+    if budget and rent_reference_year is not None:
+        bedroom_categories = {
+            0: "studio",
+            1: "1",
+            2: "2",
+            3: "3plus",
+            4: "3plus",
+            5: "3plus",
+        }
+
+        bedroom_category = bedroom_categories.get(
+            budget.get_bedrooms(), "1"
+        )
+
+        rent_observation = (
+            Observation.objects
+            .filter(
+                geography__name="Toronto CMA",
+                geography__geography_set__kind="cma",
+                indicator_id=f"cmhc-2021-apartment-rent-{bedroom_category}",
+                reference_year=rent_reference_year,
+                status="observed",
+            )
+            .first()
+        )
+
+        if rent_observation:
+            housing_rent = {
+                "value": str(rent_observation.value),
+                "bedrooms": bedroom_category,
+                "reference_year": rent_observation.reference_year,
+                "geography": "Toronto CMA",}
+
 
     return JsonResponse({
         "geographies": geographies,
@@ -186,4 +259,10 @@ def comparison(request):
             }
             for row in rows
         ],
+        "budget": {
+            "monthly_income": budget.get_monthly_income(),
+            "monthly_rent": budget.get_monthly_rent(),
+            "bedrooms": budget.get_bedrooms(),
+        } if budget else None,
+        "housing_rent": housing_rent,
     })

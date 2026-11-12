@@ -14,6 +14,7 @@ type SavedPlace = {
 
 const savedKey = "mcp-canada-saved-housing";
 
+
 const yearConfigs: Record<string, {
   sourceId: string;
   indicatorIds: string[];
@@ -21,54 +22,49 @@ const yearConfigs: Record<string, {
   "2001": {
     sourceId: "census-2001-csv-8d3542c5b0",
     indicatorIds: [
-      "census-2001-row-3",
-      "census-2001-row-745",
-      "census-2001-row-741",
-      "census-2001-row-743",
+      "census-2001-row-522", // Average household income
+      "census-2001-row-523", // Median household income
     ],
   },
   "2006": {
     sourceId: "census-2006-csv-f5eaa4478e",
     indicatorIds: [
-      "census-2006-row-3",
-      "census-2006-row-1201",
-      "census-2006-row-1197",
-      "census-2006-row-1199",
-      "census-2006-row-803",
+      "census-2006-row-577", // Median household income
+      "census-2006-row-578", // Average household income
+      "census-2006-row-607", // Median after-tax household income
+      "census-2006-row-608", // Average after-tax household income
     ],
   },
   "2011": {
     sourceId: "census-2011-csv-2fc83b4b8e",
     indicatorIds: [
-      "census-2011-row-2",
-      "census-2011-row-759",
-      "census-2011-row-1366",
-      "census-2011-row-1367",
-      "census-2011-row-1365",
-      "census-2011-row-1358",
+      "census-2011-row-757", // Median household total income
+      "census-2011-row-758", // Average household total income
+      "census-2011-row-759", // Median after-tax household income
+      "census-2011-row-760", // Average after-tax household income
     ],
   },
   "2016": {
     sourceId: "census-2016-csv-9d45a882dd",
     indicatorIds: [
-      "census-2016-row-4",
-      "census-2016-row-1684",
-      "census-2016-row-1690",
-      "census-2016-row-1680",
-      "census-2016-row-8",
+      "census-2016-row-1020", // Median total household income
+      "census-2016-row-1021", // Median after-tax household income
+      "census-2016-row-1029", // Average total household income
     ],
   },
   "2021": {
     sourceId: "census-2021-xlsx-9a3c372907",
     indicatorIds: [
-      "census-2021-row-247",
-      "census-2021-row-380",
-      "census-2021-row-381",
-      "census-2021-row-378",
-      "census-2021-row-36",
+      "census-2021-row-245", // Median total household income
+      "census-2021-row-246", // Average total household income
+      "census-2021-row-247", // Median after-tax household income
+      "census-2021-row-248", // Average after-tax household income
+      "census-2021-row-248", // Average after-tax household income
+      "census-2021-row-36",  // Median age
     ],
   },
 };
+
 
 type ComparisonResponse = {
   geographies: {
@@ -91,7 +87,45 @@ type ComparisonResponse = {
     value: string | null;
     status: string;
   }[];
+
+  budget: {
+    monthly_income: number | null;
+    monthly_rent: number | null;
+    bedrooms: number;
+  } | null;
+
+  housing_rent: {
+    value: string;
+    bedrooms: string;
+    reference_year: number;
+    geography: string;
+  } | null;
 };
+
+
+function isLowerBetter(label: string): boolean {
+  const name = label.toLowerCase();
+
+  return (
+    name.includes("rent") ||
+    name.includes("shelter cost") ||
+    name.includes("housing burden") ||
+    name.includes("spending 30%") ||
+    name.includes("unaffordable housing")
+  );
+}
+
+function isHigherBetter(label: string): boolean {
+  const name = label.toLowerCase();
+
+  return (
+    name.includes("income") ||
+    name.includes("population") ||
+    name.includes("schools") ||
+    name.includes("transit stops") ||
+    name.includes("parks")
+  );
+}
 
 function MapCard({ index }: { index: number }) {
   return (
@@ -112,89 +146,136 @@ function MapCard({ index }: { index: number }) {
 
 export default function ComparisonPage() {
   const [comparisonData, setComparisonData] =
-  useState<ComparisonResponse | null>(null);
+    useState<ComparisonResponse | null>(null);
   const [selectedYear, setSelectedYear] = useState("2021");
 
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
   const [error, setError] = useState("");
+  const [budget, setBudget] = useState<{
+    before_tax_income: number | null;
+    monthly_rent: number | null;
+    bedrooms: number;
+  } | null>(null);
+  const [budgetLoaded, setBudgetLoaded] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("mcp-canada-budget-preferences");
+
+    if (!stored) return;
+
+    try {
+      const parsed = JSON.parse(stored);
+
+      if (
+        (parsed.before_tax_income === null ||
+          typeof parsed.before_tax_income === "number") &&
+        (parsed.monthly_rent === null ||
+          typeof parsed.monthly_rent === "number") &&
+        typeof parsed.bedrooms === "number"
+      ) {
+        setBudget(parsed);
+      }
+    } catch {
+      console.error("Could not read saved budget preferences.");
+    }
+    setBudgetLoaded(true);
+  }, []);
 
   useEffect(() => {
-  async function loadComparison() {
-    setComparisonData(null);
-    setError("");
-    try {
-      const stored = localStorage.getItem(savedKey);
-      const parsed: unknown = stored ? JSON.parse(stored) : [];
+    if (!budgetLoaded) return;
 
-      if (!Array.isArray(parsed)) {
-        throw new Error("Your saved places could not be read.");
-      }
+    async function loadComparison() {
+      setComparisonData(null);
+      setError("");
+      try {
+        const stored = localStorage.getItem(savedKey);
+        const parsed: unknown = stored ? JSON.parse(stored) : [];
 
-      const places = parsed.filter(
-        (place): place is SavedPlace =>
-          place &&
-          typeof place.id === "string" &&
-          typeof place.name === "string" &&
-          Number.isInteger(place.year) &&
-          typeof place.boundary === "string"
-      );
+        if (!Array.isArray(parsed)) {
+          throw new Error("Your saved places could not be read.");
+        }
 
-      if (places.length < 3 || places.length > 5) {
-        throw new Error(
-          "Save between 3 and 5 neighbourhoods before comparing."
+        const places = parsed.filter(
+          (place): place is SavedPlace =>
+            place &&
+            typeof place.id === "string" &&
+            typeof place.name === "string" &&
+            Number.isInteger(place.year) &&
+            typeof place.boundary === "string"
+        );
+
+        if (places.length < 3 || places.length > 5) {
+          throw new Error(
+            "Save between 3 and 5 neighbourhoods before comparing."
+          );
+        }
+
+        if (places.some(place => place.boundary !== "toronto-158")) {
+          throw new Error(
+            "The current comparison supports Toronto 158 neighbourhoods only."
+          );
+        }
+
+        if (new Set(places.map(place => place.id)).size !== places.length) {
+          throw new Error(
+            "A neighbourhood can only be compared once. Remove duplicate saved entries."
+          );
+        }
+
+        setSavedPlaces(places);
+
+        const selectedConfig = yearConfigs[selectedYear];
+
+        const params = new URLSearchParams({
+          geography_ids: places.map(place => place.id).join(","),
+          indicator_ids: selectedConfig.indicatorIds.join(","),
+          source_id: selectedConfig.sourceId,
+        });
+
+        if (budget) {
+          if (budget.before_tax_income !== null) {
+            params.set("before_tax_income", String(budget.before_tax_income));
+          }
+
+          if (budget.monthly_rent !== null) {
+            params.set("monthly_rent", String(budget.monthly_rent));
+          }
+
+          params.set("bedrooms", String(budget.bedrooms));
+        }
+
+        const response = await fetch(
+          `/api/comparison/?${params.toString()}`
+        );
+
+        if (!response.ok) {
+          throw new Error("Unable to load neighbourhood data.");
+        }
+
+        const result: ComparisonResponse = await response.json();
+        setComparisonData(result);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Something went wrong."
         );
       }
-
-      if (places.some(place => place.boundary !== "toronto-158")) {
-        throw new Error(
-          "The current comparison supports Toronto 158 neighbourhoods only."
-        );
-      }
-
-      if (new Set(places.map(place => place.id)).size !== places.length) {
-        throw new Error(
-          "A neighbourhood can only be compared once. Remove duplicate saved entries."
-        );
-      }
-
-      setSavedPlaces(places);
-
-    const selectedConfig = yearConfigs[selectedYear];
-
-    const params = new URLSearchParams({
-      geography_ids: places.map(place => place.id).join(","),
-      indicator_ids: selectedConfig.indicatorIds.join(","),
-      source_id: selectedConfig.sourceId,
-    });
-
-      const response = await fetch(
-        `/api/comparison/?${params.toString()}`
-      );
-
-      if (!response.ok) {
-        throw new Error("Unable to load neighbourhood data.");
-      }
-
-      const result: ComparisonResponse = await response.json();
-      setComparisonData(result);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Something went wrong."
-      );
     }
-  }
 
-  loadComparison();
-}, [selectedYear]);
+    loadComparison();
+  }, [selectedYear, budget, budgetLoaded]);
 
   const isLoading = !comparisonData && !error;
-  const rows = comparisonData?.indicators.map((indicator) => ({
-    label: indicator.label,
-    indicatorId: indicator.id,
-    unit: indicator.unit,
-  })) ?? [];
+  const rows = comparisonData?.indicators
+    .filter(
+      (indicator) =>
+        !indicator.label.toLowerCase().includes("median age")
+    )
+    .map((indicator) => ({
+      label: indicator.label,
+      indicatorId: indicator.id,
+      unit: indicator.unit,
+    })) ?? [];
   const neighbourhoods = comparisonData
-  ? savedPlaces.map((place) => {
+    ? savedPlaces.map((place) => {
       const geography = comparisonData.geographies.find(
         (g) => g.name === place.name
       );
@@ -205,7 +286,25 @@ export default function ComparisonPage() {
         name: geography?.name ?? place.name,
       };
     })
-  : [];
+    : [];
+
+
+  const housingRent = comparisonData?.housing_rent
+    ? Number(comparisonData.housing_rent.value)
+    : null;
+
+  const monthlyIncome = comparisonData?.budget?.monthly_income ?? null;
+  const monthlyRentBudget = comparisonData?.budget?.monthly_rent ?? null;
+
+  const rentWithinBudget =
+    housingRent !== null && monthlyRentBudget !== null
+      ? housingRent <= monthlyRentBudget
+      : null;
+
+  const rentIncomeShare =
+    housingRent !== null && monthlyIncome !== null && monthlyIncome > 0
+      ? (housingRent / monthlyIncome) * 100
+      : null;
 
   return (
 
@@ -215,41 +314,49 @@ export default function ComparisonPage() {
           COMPARE PLACES · ONE SHARED PERIOD
         </p>
 
-        <h1>Side-by-side comparison</h1>
-
-        <p className={styles.subtitle}>
-          Different neighbourhoods, the same time period.
-          Compare fit, everyday needs and local context.
-        </p>
-
         <div className={styles.controls}>
           <div className={styles.period}>
             <span>PERIOD FOR ALL LOCATIONS</span>
-           <select
-            value={selectedYear}
-            onChange={(event) => setSelectedYear(event.target.value)}
-            aria-label="Select comparison period"
-          >
-            <option value="2001">2001 Census</option>
-            <option value="2006">2006 Census</option>
-            <option value="2011">2011 Census</option>
-            <option value="2016">2016 Census</option>
-            <option value="2021">2021 Census</option>
-          </select>
+            <select
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(event.target.value)}
+              aria-label="Select comparison period"
+            >
+              <option value="2001">2001 Census</option>
+              <option value="2006">2006 Census</option>
+              <option value="2011">2011 Census</option>
+              <option value="2016">2016 Census</option>
+              <option value="2021">2021 Census</option>
+            </select>
           </div>
 
           <div className={styles.profile}>
-            <span>SAMPLE PROFILE · SAME ASSUMPTIONS FOR EVERY PLACE</span>
+            <span>YOUR PROFILE · SAME ASSUMPTIONS FOR EVERY PLACE</span>
             <p>
-              2 bedrooms · $2,400 rent budget · $6,000 monthly income ·
-              30 min work commute
+              {budget ? (
+                <>
+                  {budget.bedrooms === 0
+                    ? "Studio"
+                    : `${budget.bedrooms}${budget.bedrooms === 4 ? "+" : ""} bedrooms`}
+                  {" · "}
+                  {budget.monthly_rent !== null
+                    ? `$${budget.monthly_rent.toLocaleString("en-CA")} rent budget`
+                    : "Rent budget not provided"}
+                  {" · "}
+                  {budget.before_tax_income !== null
+                    ? `$${Math.round(budget.before_tax_income).toLocaleString("en-CA")} monthly income`
+                    : "Income not provided"}
+                </>
+              ) : (
+                "Add your housing preferences to personalize this comparison."
+              )}
             </p>
           </div>
         </div>
 
         <p className={styles.note}>
-          Values are displayed in their respective units.
-          — means the observation is missing, not zero.
+          Green cells mark the best available value in each row.
+          — means missing, never zero.
           Census release: {selectedYear}. Indicator reference periods vary by measure.
         </p>
         {isLoading && (
@@ -274,116 +381,176 @@ export default function ComparisonPage() {
             ))}
           </div>
 
+
           <div className={styles.tableWrap}>
             <table>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={row.indicatorId}>
-                    <th>{row.label}</th>
+                <tr>
+                  <th scope="row">Median age of the population</th>
+                  {neighbourhoods.map((n) => {
+                    const ageIndicatorId = {
+                      "2001": null,
+                      "2006": "census-2006-row-28",
+                      "2011": "census-2011-row-39",
+                      "2016": null,
+                      "2021": "census-2021-row-36",
+                    }[selectedYear];
 
-                    {neighbourhoods.map((n) => {
-                      const observation = comparisonData?.observations.find(
+                    const observation = ageIndicatorId
+                      ? comparisonData?.observations.find(
                         (o) =>
                           o.geography_id === n.geographyId &&
-                          o.indicator_id === row.indicatorId
-                      );
+                          o.indicator_id === ageIndicatorId
+                      )
+                      : null;
 
-                      const value =
-                        observation?.status === "observed" &&
-                        observation.value !== null
-                          ? Number(observation.value)
+                    return (
+                      <td key={n.id}>
+                        {observation?.status === "observed" &&
+                          observation.value !== null
+                          ? Number(observation.value).toLocaleString("en-CA", {
+                            maximumFractionDigits: 1,
+                          })
+                          : "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {rows.map((row) => {
+                  const values = neighbourhoods.map((n) => {
+                    const observation = comparisonData?.observations.find(
+                      (o) =>
+                        o.geography_id === n.geographyId &&
+                        o.indicator_id === row.indicatorId
+                    );
+
+                    return observation?.status === "observed" &&
+                      observation.value !== null
+                      ? Number(observation.value)
+                      : null;
+                  });
+
+                  const validValues = values.filter(
+                    (value): value is number =>
+                      value !== null && Number.isFinite(value)
+                  );
+
+                  const bestValue =
+                    validValues.length === 0
+                      ? null
+                      : isLowerBetter(row.label)
+                        ? Math.min(...validValues)
+                        : isHigherBetter(row.label)
+                          ? Math.max(...validValues)
                           : null;
 
-                      let displayValue = "—";
+                  return (
+                    <tr key={row.indicatorId}>
+                      <th scope="row">{row.label}</th>
 
-                      if (value !== null && Number.isFinite(value)) {
-                        if (row.unit === "CAD/year" || row.unit === "CAD/month") {
-                          displayValue = `$${value.toLocaleString("en-CA", {
-                            maximumFractionDigits: 0,
-                          })}`;
-                        } else if (row.unit === "percent") {
-                          displayValue = `${value.toLocaleString("en-CA", {
-                            maximumFractionDigits: 1,
-                          })}%`;
-                        } else if (row.unit === "years") {
-                          displayValue = `${value.toLocaleString("en-CA", {
-                            maximumFractionDigits: 1,
-                          })}`;
-                        }
-                        else if (row.unit === "persons" || row.unit === "households") {
+                      {values.map((value, index) => {
+                        let displayValue = "—";
+
+                        if (value !== null && Number.isFinite(value)) {
                           displayValue = value.toLocaleString("en-CA", {
-                            maximumFractionDigits: 0,
+                            maximumFractionDigits: 2,
                           });
-                        }
-                      }
 
-                      return (
-                        <td key={n.id}>
-                          {displayValue}
-                        </td>
-                      );
-                    })}
+                          if (
+                            row.unit === "CAD/year" ||
+                            row.unit === "CAD/month"
+                          ) {
+                            displayValue = `$${value.toLocaleString("en-CA", {
+                              maximumFractionDigits: 0,
+                            })}`;
+                          } else if (row.unit === "percent") {
+                            displayValue = `${value.toLocaleString("en-CA", {
+                              maximumFractionDigits: 1,
+                            })}%`;
+                          } else if (row.unit === "years") {
+                            displayValue = value.toLocaleString("en-CA", {
+                              maximumFractionDigits: 1,
+                            });
+                          } else if (
+                            row.unit === "persons" ||
+                            row.unit === "households"
+                          ) {
+                            displayValue = value.toLocaleString("en-CA", {
+                              maximumFractionDigits: 0,
+                            });
+                          }
+                        }
+
+                        const isBest =
+                          bestValue !== null && value === bestValue;
+
+                        return (
+                          <td
+                            key={neighbourhoods[index].id}
+                            className={isBest ? styles.bestValue : undefined}
+                          >
+                            {displayValue}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+
+                <>
+                  <tr>
+                    <th scope="row">Within your monthly rent budget</th>
+                    {neighbourhoods.map((place) => (
+                      <td key={place.id}>
+                        {rentWithinBudget === null
+                          ? "—"
+                          : rentWithinBudget
+                            ? "Yes"
+                            : "No"}
+                      </td>
+                    ))}
                   </tr>
-                ))}
+
+                  <tr>
+                    <th scope="row">
+                      Average monthly rent ({comparisonData?.housing_rent?.geography ?? "Toronto CMA"})
+                    </th>
+                    {neighbourhoods.map((place) => (
+                      <td key={place.id}>
+                        {housingRent === null
+                          ? "—"
+                          : housingRent.toLocaleString("en-CA", {
+                            style: "currency",
+                            currency: "CAD",
+                            maximumFractionDigits: 0,
+                          })}
+                      </td>
+                    ))}
+                  </tr>
+
+                  <tr>
+                    <th scope="row">Share of monthly income</th>
+                    {neighbourhoods.map((place) => (
+                      <td key={place.id}>
+                        {rentIncomeShare !== null
+                          ? `${rentIncomeShare.toFixed(1)}%`
+                          : "—"}
+                      </td>
+                    ))}
+                  </tr>
+                </>
               </tbody>
             </table>
           </div>
+
         </section>
 
         <p className={styles.disclaimer}>
-          Source: Statistics Canada, {selectedYear} Census. Indicator definitions and reference periods may vary by Census year.
+          Sources: Statistics Canada, {selectedYear} Census; CMHC,
+          {comparisonData?.housing_rent?.reference_year ?? "latest available"}.
+          CMHC rent represents the Toronto CMA.
         </p>
-                
-        {/* AI-generated neighbourhood recommendations */}
-        <section className={styles.recommendations}>
-          <h2>Where could you live?</h2>
-
-          <div className={styles.aiBanner}>
-            <h3>✦ AI-generated recommendations</h3>
-            <p>
-              These suggestions use the sample profile and illustrative
-              comparison data. They are a starting point and are not yet
-              personalized to you.
-            </p>
-            <p>
-              For more personalized recommendations, fill out your profile
-              with your budget, work or school destination, everyday needs
-              and lifestyle preferences.
-            </p>
-            <span className={styles.primaryAction}>
-              Complete your profile →
-            </span>
-          </div>
-
-          <div className={styles.recommendationGrid}>
-            <article className={styles.recommendationCard}>
-              <h3>Best sample overall · Erindale</h3>
-              <p>
-                Consider Erindale if shorter commutes and transit access
-                matter most. It has the highest illustrative match score
-                (72/100), but $2,950 rent exceeds the sample budget by $550.
-              </p>
-            </article>
-
-            <article className={styles.recommendationCard}>
-              <h3>For parks & lifestyle · Cooksville</h3>
-              <p>
-                Consider Cooksville if parks and lifestyle fit are
-                priorities. The sample commute is 23 min; $2,650 rent
-                exceeds the sample budget by $250.
-              </p>
-            </article>
-
-            <article className={styles.recommendationCard}>
-              <h3>For the sample budget · Port Credit</h3>
-              <p>
-                Consider Port Credit if the $2,400 rent limit is your
-                priority. Sample rent is $2,300, but the 31 min commute
-                exceeds the sample limit. School and safety data are missing.
-              </p>
-            </article>
-          </div>
-        </section>
 
         {/* Local historical context */}
         <section className={styles.history}>
@@ -421,12 +588,14 @@ export default function ComparisonPage() {
           <h2>Data coverage & method</h2>
 
           <p>
-            The comparison table uses observed values from the 2021
-            Toronto neighbourhood Census profiles. The recommendations
-            and match scores are still illustrative and are not yet
-            calculated from your personal profile. Missing factors
-            must be excluded and available weights normalized when
-            calculating personalized scores.
+            The comparison table uses observed values from the selected
+            Census year. Housing affordability is shown separately using
+            CMHC average apartment rent for your selected bedroom category.
+            Rent figures represent the Toronto CMA, not individual
+            neighbourhoods. For 4+ bedroom selections, the available
+            3-bedroom-and-plus category is used. Share of monthly income
+            is calculated using your provided monthly income.
+            Missing Census indicators are excluded from comparisons.
           </p>
 
           <p>
@@ -443,7 +612,7 @@ export default function ComparisonPage() {
           <span>Complete your profile</span>
         </div>
 
-        </main>
+      </main>
 
       {/* Reserved for teammate's history teacher sidebar */}
       <aside

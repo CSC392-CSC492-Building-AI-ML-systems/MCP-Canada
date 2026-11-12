@@ -108,6 +108,20 @@ export default function Home() {
   const [annualIncome, setAnnualIncome] = useState("");
   const [monthlyRentBudget, setMonthlyRentBudget] = useState("");
   const [bedrooms, setBedrooms] = useState("1");
+  useEffect(() => {
+  localStorage.setItem(
+    "mcp-canada-budget-preferences",
+    JSON.stringify({
+      before_tax_income: annualIncome
+        ? Number(annualIncome) / 12
+        : null,
+      monthly_rent: monthlyRentBudget
+        ? Number(monthlyRentBudget)
+        : null,
+      bedrooms: Number(bedrooms),
+    })
+  );
+}, [annualIncome, monthlyRentBudget, bedrooms]);
   const [observationResult, setObservationResult] =
     useState<ObservationResult | null>(null);
   const [observationError, setObservationError] =
