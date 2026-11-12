@@ -34,6 +34,7 @@ const yearConfigs: Record<string, {
   "2006": {
     sourceId: "census-2006-csv-f5eaa4478e",
     indicatorIds: [
+      "census-2006-row-28", // Median age
       "census-2006-row-577", // Median household income
       "census-2006-row-578", // Average household income
       "census-2006-row-607", // Median after-tax household income
@@ -43,10 +44,12 @@ const yearConfigs: Record<string, {
   "2011": {
     sourceId: "census-2011-csv-2fc83b4b8e",
     indicatorIds: [
-      "census-2011-row-757", // Median household total income
-      "census-2011-row-758", // Average household total income
-      "census-2011-row-759", // Median after-tax household income
-      "census-2011-row-760", // Average after-tax household income
+      "census-2011-row-39",
+      "census-2011-row-757",
+      "census-2011-row-758",
+      "census-2011-row-759",
+      "census-2011-row-760",
+      "census-2011-row-1367", // Average monthly shelter cost for rented dwellings
     ],
   },
   "2016": {
@@ -60,12 +63,12 @@ const yearConfigs: Record<string, {
   "2021": {
     sourceId: "census-2021-xlsx-9a3c372907",
     indicatorIds: [
-      "census-2021-row-245", // Median total household income
-      "census-2021-row-246", // Average total household income
-      "census-2021-row-247", // Median after-tax household income
-      "census-2021-row-248", // Average after-tax household income
-      "census-2021-row-248", // Average after-tax household income
-      "census-2021-row-36",  // Median age
+      "census-2021-row-245",
+      "census-2021-row-246",
+      "census-2021-row-247",
+      "census-2021-row-248",
+      "census-2021-row-36",
+      "census-2021-row-381", // Average monthly shelter cost for rented dwellings
     ],
   },
 };
@@ -175,7 +178,7 @@ export default function ComparisonPage() {
 
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
   const [error, setError] = useState("");
-    const storedBudget = useSyncExternalStore(
+  const storedBudget = useSyncExternalStore(
     subscribeBudget,
     readBudget,
     () => ""
@@ -203,10 +206,14 @@ export default function ComparisonPage() {
     return null;
   }, [storedBudget]);
 
+
   useEffect(() => {
+    const controller = new AbortController();
+
     async function loadComparison() {
       setComparisonData(null);
       setError("");
+
       try {
         const stored = localStorage.getItem(savedKey);
         const parsed: unknown = stored ? JSON.parse(stored) : [];
@@ -254,7 +261,10 @@ export default function ComparisonPage() {
 
         if (budget) {
           if (budget.before_tax_income !== null) {
-            params.set("before_tax_income", String(budget.before_tax_income));
+            params.set(
+              "before_tax_income",
+              String(budget.before_tax_income)
+            );
           }
 
           if (budget.monthly_rent !== null) {
@@ -265,7 +275,8 @@ export default function ComparisonPage() {
         }
 
         const response = await fetch(
-          `/api/comparison/?${params.toString()}`
+          `/api/comparison/?${params.toString()}`,
+          { signal: controller.signal }
         );
 
         if (!response.ok) {
@@ -273,22 +284,41 @@ export default function ComparisonPage() {
         }
 
         const result: ComparisonResponse = await response.json();
-        setComparisonData(result);
+
+        if (!controller.signal.aborted) {
+          setComparisonData(result);
+        }
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Something went wrong."
-        );
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        if (!controller.signal.aborted) {
+          setError(
+            err instanceof Error ? err.message : "Something went wrong."
+          );
+        }
       }
     }
 
     loadComparison();
+
+    return () => controller.abort();
   }, [selectedYear, budget]);
 
+
   const isLoading = !comparisonData && !error;
+  const affordabilityRentIds = [
+    "census-2011-row-1367",
+    "census-2021-row-381",
+  ];
+
   const rows = comparisonData?.indicators
     .filter(
       (indicator) =>
-        !indicator.label.toLowerCase().includes("median age")
+        !indicator.label.toLowerCase().includes("median age") &&
+        !indicator.label.toLowerCase().includes("income") &&
+        !affordabilityRentIds.includes(indicator.id)
     )
     .map((indicator) => ({
       label: indicator.label,
@@ -308,7 +338,75 @@ export default function ComparisonPage() {
       };
     })
     : [];
+  const affordabilityIds: Record<
+    string,
+    { rent: string; income: string } | null
+  > = {
+    "2001": null,
+    "2006": null,
+    "2011": {
+      rent: "census-2011-row-1367",
+      income: "census-2011-row-758",
+    },
+    "2016": null,
+    "2021": {
+      rent: "census-2021-row-381",
+      income: "census-2021-row-246",
+    },
+  };
 
+  const affordability = neighbourhoods.map((n) => {
+    const ids = affordabilityIds[selectedYear];
+
+    if (!ids || !n.geographyId) {
+      return {
+        rent: null,
+        withinBudget: null,
+        incomeShare: null,
+      };
+    }
+
+    const rentObservation = comparisonData?.observations.find(
+      (o) =>
+        o.geography_id === n.geographyId &&
+        o.indicator_id === ids.rent
+    );
+
+    const incomeObservation = comparisonData?.observations.find(
+      (o) =>
+        o.geography_id === n.geographyId &&
+        o.indicator_id === ids.income
+    );
+
+    const rent =
+      rentObservation?.status === "observed" &&
+        rentObservation.value !== null
+        ? Number(rentObservation.value)
+        : null;
+
+    const annualIncome =
+      incomeObservation?.status === "observed" &&
+        incomeObservation.value !== null
+        ? Number(incomeObservation.value)
+        : null;
+
+    const monthlyHouseholdIncome =
+      annualIncome !== null && annualIncome > 0
+        ? annualIncome / 12
+        : null;
+
+    return {
+      rent,
+      withinBudget:
+        rent !== null && comparisonData?.budget?.monthly_rent != null
+          ? rent <= comparisonData.budget.monthly_rent
+          : null,
+      incomeShare:
+        rent !== null && monthlyHouseholdIncome !== null
+          ? (rent / monthlyHouseholdIncome) * 100
+          : null,
+    };
+  });
 
   const housingRent = comparisonData?.housing_rent
     ? Number(comparisonData.housing_rent.value)
@@ -518,49 +616,50 @@ export default function ComparisonPage() {
                     </tr>
                   );
                 })}
+                {/* Housing affordability rows */}
 
-                <>
-                  <tr>
-                    <th scope="row">Within your monthly rent budget</th>
-                    {neighbourhoods.map((place) => (
-                      <td key={place.id}>
-                        {rentWithinBudget === null
-                          ? "—"
-                          : rentWithinBudget
-                            ? "Yes"
-                            : "No"}
-                      </td>
-                    ))}
-                  </tr>
+                <tr>
+                  <th scope="row">Average monthly rent</th>
 
-                  <tr>
-                    <th scope="row">
-                      Average monthly rent ({comparisonData?.housing_rent?.geography ?? "Toronto CMA"})
-                    </th>
-                    {neighbourhoods.map((place) => (
-                      <td key={place.id}>
-                        {housingRent === null
-                          ? "—"
-                          : housingRent.toLocaleString("en-CA", {
-                            style: "currency",
-                            currency: "CAD",
-                            maximumFractionDigits: 0,
-                          })}
-                      </td>
-                    ))}
-                  </tr>
+                  {affordability.map((item, index) => (
+                    <td key={neighbourhoods[index].id}>
+                      {item.rent !== null
+                        ? item.rent.toLocaleString("en-CA", {
+                          style: "currency",
+                          currency: "CAD",
+                          maximumFractionDigits: 0,
+                        })
+                        : "—"}
+                    </td>
+                  ))}
+                </tr>
 
-                  <tr>
-                    <th scope="row">Share of monthly income</th>
-                    {neighbourhoods.map((place) => (
-                      <td key={place.id}>
-                        {rentIncomeShare !== null
-                          ? `${rentIncomeShare.toFixed(1)}%`
-                          : "—"}
-                      </td>
-                    ))}
-                  </tr>
-                </>
+                <tr>
+                  <th scope="row">Within your monthly rent budget?</th>
+
+                  {affordability.map((item, index) => (
+                    <td key={neighbourhoods[index].id}>
+                      {item.withinBudget === null
+                        ? "—"
+                        : item.withinBudget
+                          ? "Yes"
+                          : "No"}
+                    </td>
+                  ))}
+                </tr>
+
+                <tr>
+                  <th scope="row">Share of average monthly household income</th>
+
+                  {affordability.map((item, index) => (
+                    <td key={neighbourhoods[index].id}>
+                      {item.incomeShare !== null
+                        ? `${item.incomeShare.toFixed(1)}%`
+                        : "—"}
+                    </td>
+                  ))}
+                </tr>
+
               </tbody>
             </table>
           </div>
