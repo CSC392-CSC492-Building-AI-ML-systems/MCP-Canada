@@ -216,6 +216,53 @@ backend/.venv/bin/python backend/test_mcp.py
 This launches the server, initializes a real MCP session, discovers its tools,
 and invokes `health_check` without a database or running HTTP server.
 
+## MCP-Canada data server
+
+The backend also acts as an MCP **client** of the separate
+[MCP-Canada server](https://github.com/CSC392-CSC492-Building-AI-ML-systems/mcp-canada-server),
+which wraps Canadian government APIs (Bank of Canada, Statistics Canada, Toronto
+Open Data and more). This is the opposite direction from `backend/mcp_server.py`
+above. Django starts MCP-Canada itself on the first request that needs it and keeps
+one connection open. Each result is cached in the database together with the source
+and timestamp MCP-Canada reports. Only the `/api/mcp-canada/...` endpoints use it;
+the rest of the app runs without any of this setup.
+
+Setup, from `backend/` (the variables are also listed in `backend/.env.example`):
+
+```sh
+# One-time: download and install the server (can take a minute)
+uv tool run --from git+https://github.com/CSC392-CSC492-Building-AI-ML-systems/mcp-canada-server mcp-canada --help
+
+# Every new terminal that runs Django
+export MCP_CANADA_COMMAND=uv
+export MCP_CANADA_ARGS="tool run --from git+https://github.com/CSC392-CSC492-Building-AI-ML-systems/mcp-canada-server mcp-canada"
+
+# Once, to create the cache table
+uv run python manage.py migrate
+```
+
+Try it:
+
+```sh
+uv run python manage.py mcp_canada_timing   # times a first call, a live call and a cached read
+uv run python manage.py runserver 127.0.0.1:8000
+```
+
+Then open `http://127.0.0.1:8000/api/mcp-canada/cpi/`. It returns monthly
+Canadian CPI (Bank of Canada series V41690973) with a `status`:
+
+- `fresh`: a live result, or a saved copy less than 24 hours old (`from_cache` says which)
+- `may_be_outdated`: MCP-Canada failed, so an older saved copy is returned with the `error`
+- `unavailable`: MCP-Canada failed and nothing is saved (HTTP 503)
+
+Optional query parameters: `start_date=YYYY-MM-DD` (default `2020-01-01`) and
+`refresh=1` to skip the cache. The first call after Django starts takes about
+2 seconds while MCP-Canada starts; cached reads take a few milliseconds.
+
+The tests in `backend/api/test_mcp_canada.py` use a small fake server
+(`backend/api/fake_mcp_canada_server.py`), so `manage.py test` and CI need
+neither the real server nor network access.
+
 ## Imported public data
 
 The local database now includes reviewed Census/CMHC/CPI measurements, place
