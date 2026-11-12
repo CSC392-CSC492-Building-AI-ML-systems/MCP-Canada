@@ -10,7 +10,25 @@ A Next.js / React frontend and a Python / Django API. SQLite persistence uses Dj
 
 ## Local development
 
-Run these commands from the repository root. Keep each server running in its own terminal.
+### Start both servers
+
+With Node.js, npm, uv and curl on your PATH, run this from the repository root:
+
+```sh
+./scripts/start-all.sh
+```
+
+The script installs the versions from `backend/uv.lock` and
+`frontend/package-lock.json`, applies Django migrations, and starts both servers.
+Once the API responds through Next.js, open http://localhost:3000. Press Ctrl+C
+to stop both servers.
+
+If the default ports are in use, run
+`BACKEND_PORT=8001 FRONTEND_PORT=3001 ./scripts/start-all.sh`.
+The script configures the frontend proxy to use the selected backend port.
+Mapbox setup and the optional official data import are described below.
+
+To run the servers separately, use the commands in the next two sections.
 
 ### Backend — terminal 1
 
