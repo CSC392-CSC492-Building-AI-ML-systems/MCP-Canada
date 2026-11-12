@@ -111,7 +111,7 @@ export function ExplorationWorkspace({ renderMap }: {
     <header className={styles.navigation}>
       <Link href="/" className={styles.brand}><span className={styles.brandMark} aria-hidden="true">N</span><span>Neighbourhood<span>Explorer / Toronto</span></span></Link>
       <div className={styles.navContext}><span className={styles.navDot} /> Housing &amp; affordability</div>
-      <div className={styles.navActions}><Link href="/housing/data/">Browse source data ↗</Link><button type="button" className={styles.secondaryButton} onClick={() => dialog.current?.showModal()}>Saved places <span className={styles.savedCount}>{saved.length}</span></button></div>
+      <div className={styles.navActions}><Link href="/housing/personalize/">Personalize search ↗</Link><button type="button" className={styles.secondaryButton} onClick={() => dialog.current?.showModal()}>Saved places <span className={styles.savedCount}>{saved.length}</span></button></div>
     </header>
     <main className={styles.workspace}>
       <section className={styles.mapArea} aria-label="Shared exploration map area">
