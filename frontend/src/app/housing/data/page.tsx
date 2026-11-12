@@ -121,6 +121,7 @@ export default function Home() {
       bedrooms: Number(bedrooms),
     })
   );
+  window.dispatchEvent(new Event("budget-preferences-change"));
 }, [annualIncome, monthlyRentBudget, bedrooms]);
   const [observationResult, setObservationResult] =
     useState<ObservationResult | null>(null);

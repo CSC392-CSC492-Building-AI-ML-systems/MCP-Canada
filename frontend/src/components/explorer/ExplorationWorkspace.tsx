@@ -14,6 +14,25 @@ function subscribeSaved(callback: () => void) {
   window.addEventListener('saved-housing-change', callback);
   return () => { window.removeEventListener('storage', callback); window.removeEventListener('saved-housing-change', callback); };
 }
+const budgetStorageKey = "mcp-canada-budget-preferences";
+
+function subscribeBudget(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener("budget-preferences-change", callback);
+
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener("budget-preferences-change", callback);
+  };
+}
+
+function readBudgetPreferences() {
+  try {
+    return localStorage.getItem(budgetStorageKey) ?? "";
+  } catch {
+    return "";
+  }
+}
 function readSaved() { try { return localStorage.getItem(savedKey) || '[]'; } catch { return '[]'; } }
 /** Shared selection is owned here. A teammate can mount the map with renderMap
  * and route map clicks through onSelectionChange; the panel and timeline sync. */
@@ -26,27 +45,34 @@ export function ExplorationWorkspace({ renderMap }: {
   const [loadError, setLoadError] = useState('');
   const [result, setResult] = useState<{ key: string; profile: NeighbourhoodProfile } | null>(null);
   const [profileError, setProfileError] = useState<{ key: string; message: string } | null>(null);
-  const [income, setIncome] = useState('');
-  const [budget, setBudget] = useState('');
-  useEffect(() => {
-    const saved = localStorage.getItem("mcp-canada-budget-preferences");
+    const storedBudget = useSyncExternalStore(
+    subscribeBudget,
+    readBudgetPreferences,
+    () => ""
+  );
 
-    if (saved) {
-      const preferences = JSON.parse(saved);
-
-      setIncome(
-        preferences.before_tax_income != null
-          ? String(preferences.before_tax_income * 12)
-          : ""
-      );
-
-      setBudget(
-        preferences.monthly_rent != null
-          ? String(preferences.monthly_rent)
-          : ""
-      );
+  const savedBudget = useMemo(() => {
+    try {
+      return storedBudget ? JSON.parse(storedBudget) : null;
+    } catch {
+      return null;
     }
-  }, []);
+  }, [storedBudget]);
+
+  const [incomeOverride, setIncomeOverride] = useState<string | null>(null);
+  const [budgetOverride, setBudgetOverride] = useState<string | null>(null);
+
+  const income =
+    incomeOverride ??
+    (savedBudget?.before_tax_income != null
+      ? String(savedBudget.before_tax_income * 12)
+      : "");
+
+  const budget =
+    budgetOverride ??
+    (savedBudget?.monthly_rent != null
+      ? String(savedBudget.monthly_rent)
+      : "");
   const storedSaved = useSyncExternalStore(subscribeSaved, readSaved, () => '[]');
   const [sessionSaved, setSessionSaved] = useState<SavedPlace[] | null>(null);
   const saved = useMemo(() => {
@@ -129,7 +155,8 @@ export function ExplorationWorkspace({ renderMap }: {
         </div>}
         {selection && activeSet && <div className={styles.mapBottom}><p className={styles.boundaryNote}>{activeSet.label} boundaries remain fixed while you change the year. A different boundary set starts a new selection.</p><CensusTimeline years={activeSet.years} year={selection.year} onYearChange={year => setSelection({ ...selection, year })} /></div>}
       </section>
-      {profile ? <NeighbourhoodDetailsPanel profile={profile} income={income} budget={budget} onIncomeChange={setIncome} onBudgetChange={setBudget} saved={isSaved} limitReached={saved.length >= 5} onCompare={() => {
+      {profile ? <NeighbourhoodDetailsPanel profile={profile} income={income} budget={budget} onIncomeChange={setIncomeOverride}
+onBudgetChange={setBudgetOverride} saved={isSaved} limitReached={saved.length >= 5} onCompare={() => {
         if (!isSaved && saved.length < 5) savePlaces([...saved, { id: profile.geography.id, name: profile.geography.name, year: profile.year, boundary: profile.geography.boundary_set }]);
       }} /> : <aside className={styles.detailsPanel}><div className={styles.panelScroll} role={error ? 'alert' : 'status'}><span className={styles.kicker}>NEIGHBOURHOOD DETAILS</span><h2>{error ? 'Could not load this selection' : loadError ? 'Waiting for published data' : 'Loading housing data…'}</h2><p>{error || loadError || 'Finding the selected Census period and its sources.'}</p>{error && <button className={styles.secondaryButton} onClick={() => setSelection(s => s ? { ...s } : null)}>Try again</button>}</div></aside>}
     </main>

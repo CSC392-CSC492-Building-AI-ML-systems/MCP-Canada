@@ -1,8 +1,13 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
 import styles from "./comparison.module.css";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 
 type SavedPlace = {
@@ -143,6 +148,25 @@ function MapCard({ index }: { index: number }) {
   );
 }
 
+const budgetStorageKey = "mcp-canada-budget-preferences";
+
+function subscribeBudget(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener("budget-preferences-change", callback);
+
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener("budget-preferences-change", callback);
+  };
+}
+
+function readBudget() {
+  try {
+    return localStorage.getItem(budgetStorageKey) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 export default function ComparisonPage() {
   const [comparisonData, setComparisonData] =
@@ -151,19 +175,17 @@ export default function ComparisonPage() {
 
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
   const [error, setError] = useState("");
-  const [budget, setBudget] = useState<{
-    before_tax_income: number | null;
-    monthly_rent: number | null;
-    bedrooms: number;
-  } | null>(null);
-  const [budgetLoaded, setBudgetLoaded] = useState(false);
-  useEffect(() => {
-    const stored = localStorage.getItem("mcp-canada-budget-preferences");
+    const storedBudget = useSyncExternalStore(
+    subscribeBudget,
+    readBudget,
+    () => ""
+  );
 
-    if (!stored) return;
+  const budget = useMemo(() => {
+    if (!storedBudget) return null;
 
     try {
-      const parsed = JSON.parse(stored);
+      const parsed = JSON.parse(storedBudget);
 
       if (
         (parsed.before_tax_income === null ||
@@ -172,17 +194,16 @@ export default function ComparisonPage() {
           typeof parsed.monthly_rent === "number") &&
         typeof parsed.bedrooms === "number"
       ) {
-        setBudget(parsed);
+        return parsed;
       }
     } catch {
       console.error("Could not read saved budget preferences.");
     }
-    setBudgetLoaded(true);
-  }, []);
+
+    return null;
+  }, [storedBudget]);
 
   useEffect(() => {
-    if (!budgetLoaded) return;
-
     async function loadComparison() {
       setComparisonData(null);
       setError("");
@@ -261,7 +282,7 @@ export default function ComparisonPage() {
     }
 
     loadComparison();
-  }, [selectedYear, budget, budgetLoaded]);
+  }, [selectedYear, budget]);
 
   const isLoading = !comparisonData && !error;
   const rows = comparisonData?.indicators
