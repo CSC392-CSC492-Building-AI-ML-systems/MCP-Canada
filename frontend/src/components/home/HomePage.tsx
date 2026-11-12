@@ -1,12 +1,16 @@
 "use client";
 
 import Link from 'next/link';
-import {useState, type FormEvent} from 'react';
+import {useRouter} from 'next/navigation';
+import {useEffect, useRef, useState, type FormEvent} from 'react';
+import {findBoundary, loadBoundaries} from '@/lib/boundaries';
+import {MAPBOX_TOKEN, newSessionToken, placeHref, retrievePlace, suggestPlaces, type Suggestion} from '@/lib/mapbox';
 import {loadWorkspaceData} from '../explorer/data';
 import styles from './home.module.css';
 
 type Place = {id:string;name:string};
 const previewYears=[1850,1920,1950,1980,2026];
+const MIN_ADDRESS_QUERY=3;
 
 function CampusIllustration({zoom}:{zoom:number}) {
   return <svg className={styles.campusArt} viewBox="0 0 720 460" role="img" aria-label="Illustrative isometric campus, not an actual geographic or historical map">
@@ -41,7 +45,36 @@ export function HomePage() {
   const [searchState,setSearchState]=useState<'idle'|'loading'|'ready'|'error'>('idle');
   const [showResults,setShowResults]=useState(false);
   const [searchMessage,setSearchMessage]=useState('');
-  const matching=places.filter(p=>p.name.toLowerCase().includes(query.trim().toLowerCase())).slice(0,5);
+  const [found,setFound]=useState<{query:string;items:Suggestion[];failed?:boolean}|null>(null);
+  const sessionRef=useRef<string|null>(null);
+  const router=useRouter();
+  const needle=query.trim().toLowerCase();
+  const matching=places.filter(p=>p.name.toLowerCase().includes(needle)).slice(0,5);
+  const searchesAddresses=!!MAPBOX_TOKEN&&needle.length>=MIN_ADDRESS_QUERY;
+  const addressResult=searchesAddresses&&found?.query===needle?found:null;
+  const addresses=addressResult?.items??[];
+  const addressesPending=searchesAddresses&&!addressResult;
+  useEffect(()=>{
+    if(!MAPBOX_TOKEN||needle.length<MIN_ADDRESS_QUERY)return;
+    const controller=new AbortController();
+    const timer=setTimeout(()=>{
+      sessionRef.current??=newSessionToken();
+      suggestPlaces(needle,sessionRef.current,controller.signal)
+        .then(items=>setFound({query:needle,items}))
+        .catch(()=>{if(!controller.signal.aborted)setFound({query:needle,items:[],failed:true});});
+    },250);
+    return ()=>{clearTimeout(timer);controller.abort();};
+  },[needle]);
+  async function chooseAddress(suggestion:Suggestion) {
+    setSearchMessage('Opening that location…');
+    try {
+      sessionRef.current??=newSessionToken();
+      const place=await retrievePlace(suggestion.mapboxId,sessionRef.current);
+      const boundaries=await loadBoundaries('toronto-158');
+      router.push(placeHref(place,findBoundary(boundaries,place.coordinates)?.properties.geography_id));
+    }catch {setSearchMessage('Could not open that location. Try again or choose another result.');}
+    finally {sessionRef.current=null;}
+  }
   async function prepareSearch() {
     setShowResults(true);
     if(searchState==='ready'||searchState==='loading')return;
@@ -54,16 +87,25 @@ export function HomePage() {
   }
   function search(event:FormEvent<HTMLFormElement>) {
     event.preventDefault();setShowResults(true);
-    setSearchMessage(query.trim()?'Choose a matching Toronto neighbourhood below. Street, building and Mississauga search will arrive with the map.':'Enter a Toronto neighbourhood to search.');
     void prepareSearch();
+    if(!needle){setSearchMessage('Enter a Toronto neighbourhood, street or building to search.');return;}
+    if(matching[0]){router.push(`/housing/?neighbourhood=${encodeURIComponent(matching[0].id)}`);return;}
+    if(addresses[0]){void chooseAddress(addresses[0]);return;}
+    setSearchMessage(addressesPending?'Still searching. Choose a result below.':'');
   }
   return <div className={styles.home}>
     <header className={styles.header}><Link href="/" className={styles.brand} aria-label="Neighbourhood Explorer home"><span className={styles.brandIcon} aria-hidden="true">N</span><span>NEIGHBOURHOOD <span>/ EXPLORER</span></span></Link><nav aria-label="Main navigation"><Link href="/housing/">3D Map Explorer <span aria-hidden="true">↗</span></Link><a href="#about">About</a></nav></header>
     <main className={styles.main}>
       <section className={styles.hero} aria-labelledby="home-title"><div className={styles.heroCopy}><p className={styles.kicker}><span/>YOUR NEIGHBOURHOOD, THROUGH TIME</p><h1 id="home-title">Explore history<br/>on a <span>3D map.</span></h1><p className={styles.description}>Look around a neighbourhood in 3D. Move the timeline to see what changed, and inspect historical data beside the map.</p><Link className={styles.primary} href="/housing/">Open 3D Map Explorer <span aria-hidden="true">→</span></Link>
         <div className={styles.searchArea}><label htmlFor="place-search">Or search a neighbourhood, street, or building</label><form onSubmit={search} className={styles.searchForm} role="search"><span aria-hidden="true">⌕</span><input id="place-search" autoComplete="off" type="search" placeholder="Where would you like to explore?" value={query} onFocus={()=>void prepareSearch()} onChange={e=>{setQuery(e.target.value);setShowResults(true);setSearchMessage('');}} onKeyDown={e=>{if(e.key==='Escape')setShowResults(false);}} aria-describedby="search-scope"/><button type="submit" aria-label="Search places">→</button></form>
-          <p id="search-scope" className={styles.searchScope}>Toronto neighbourhood search is available. Streets and buildings are coming with the map.</p>
-          {showResults&&<div className={styles.searchResults} aria-label="Neighbourhood search results"><div className={styles.searchResultsTop}><strong>Toronto neighbourhoods</strong><button type="button" aria-label="Close search results" onClick={()=>setShowResults(false)}>×</button></div>{searchState==='loading'?<p role="status">Finding neighbourhoods…</p>:searchState==='error'?<p role="status">Search is unavailable right now. You can still <Link href="/housing/">open the explorer</Link>.</p>:query.trim()===''?<p>Start typing a neighbourhood name, such as Annex or West Humber.</p>:matching.length? <ul>{matching.map(p=><li key={p.id}><Link href={`/housing/?neighbourhood=${encodeURIComponent(p.id)}`}>{p.name}<span aria-hidden="true">↗</span></Link></li>)}</ul>:<p>No matching neighbourhood in the loaded Toronto data. Mississauga, streets and buildings are not included yet.</p>}{searchMessage&&<p role="status">{searchMessage}</p>}</div>}
+          <p id="search-scope" className={styles.searchScope}>{MAPBOX_TOKEN?'Search Toronto neighbourhoods, streets and buildings.':'Toronto neighbourhood search is available.'}</p>
+          {showResults&&<div className={styles.searchResults} aria-label="Place search results"><div className={styles.searchResultsTop}><strong>Toronto places</strong><button type="button" aria-label="Close search results" onClick={()=>setShowResults(false)}>×</button></div>{searchState==='loading'?<p role="status">Finding neighbourhoods…</p>:searchState==='error'?<p role="status">Search is unavailable right now. You can still <Link href="/housing/">open the explorer</Link>.</p>:needle===''?<p>Start typing a neighbourhood, street or building, such as Annex or 100 Queen St W.</p>:<>
+            {matching.length>0&&<><p className={styles.resultsLabel}>Neighbourhoods</p><ul>{matching.map(p=><li key={p.id}><Link href={`/housing/?neighbourhood=${encodeURIComponent(p.id)}`}>{p.name}<span aria-hidden="true">↗</span></Link></li>)}</ul></>}
+            {addresses.length>0&&<><p className={styles.resultsLabel}>Streets, buildings and places</p><ul>{addresses.map(a=><li key={a.mapboxId}><button type="button" onClick={()=>void chooseAddress(a)}><span>{a.name}{a.detail&&<small>{a.detail}</small>}</span><span aria-hidden="true">↗</span></button></li>)}</ul></>}
+            {addressesPending&&<p role="status">Searching streets and buildings…</p>}
+            {addressResult?.failed&&<p role="status">Street and building search is unavailable right now.</p>}
+            {!matching.length&&!addresses.length&&!addressesPending&&!addressResult?.failed&&<p>No matching place in Toronto.</p>}
+          </>}{searchMessage&&<p role="status">{searchMessage}</p>}</div>}
         </div>
         <div className={styles.searchExamples}><span>TRY A PLACE</span>{['UTM campus','Davis Building','Instructional Centre'].map(place=><button type="button" key={place} onClick={()=>{setQuery(place);void prepareSearch();}}>{place} <span aria-hidden="true">↗</span></button>)}</div>
       </div>
