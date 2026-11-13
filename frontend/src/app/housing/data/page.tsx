@@ -20,36 +20,141 @@ const money = new Intl.NumberFormat('en-CA', {
   style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
 });
 
-export default function ProfilePage() {
-  const [sample, setSample] = useState('');
-  const [income, setIncome] = useState('');
-  const [rent, setRent] = useState('');
-  const [bedrooms, setBedrooms] = useState('');
-  const [mode, setMode] = useState('Transit');
-  const [work, setWork] = useState('');
-  const [school, setSchool] = useState('');
-  const [trip, setTrip] = useState(30);
-  const [priorities, setPriorities] = useState<number[]>([]);
-  const [weights, setWeights] = useState([3, 3, 3, 3, 3, 3]);
-  const [interests, setInterests] = useState<string[]>([]);
-  const [notes, setNotes] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const monthly = Number(income) / 12;
+export default function Home() {
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [topic, setTopic] = useState<DataTopic>("rent");
+  const [geographyId, setGeographyId] = useState("");
+  const [indicatorId, setIndicatorId] = useState("");
+  const [sourceId, setSourceId] = useState("");
+  const [annualIncome, setAnnualIncome] = useState("");
+  const [rentSharePercent, setRentSharePercent] = useState("30");
+  const [observationResult, setObservationResult] =
+    useState<ObservationResult | null>(null);
+  const [observationError, setObservationError] =
+    useState<ObservationError | null>(null);
 
-  function applySample(profile: (typeof samples)[number]) {
-    setSample(profile.name);
-    setIncome(profile.income);
-    setRent(profile.rent);
-    setBedrooms(profile.bedrooms);
-    setTrip(profile.trip);
-    setPriorities(profile.priorities);
-    setWeights(profile.weights);
-    setWork('');
-    setSchool('');
-    setMode('Transit');
-    setInterests(profile.name.startsWith('Lisa') ? ['Community stories'] : []);
-    setNotes('');
-  }
+  useEffect(() => {
+    const controller = new AbortController();
+    getJson<Catalog>("/api/catalog/", controller.signal)
+      .then((data) => {
+        setCatalog(data);
+        const selection = defaultHousingSelection(data);
+        setGeographyId(selection.geography?.id ?? "");
+        setIndicatorId(selection.indicator?.id ?? "");
+        setSourceId(selection.source?.id ?? "");
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setCatalogError(
+            error instanceof Error ? error.message : "Could not load housing data.",
+          );
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  const selectedGeography = catalog?.geographies.find(
+    (geography) => geography.id === geographyId,
+  );
+  const indicators = useMemo(
+    () =>
+      catalog
+        ? indicatorsForGeography(
+            indicatorsForTopic(catalog, topic),
+            selectedGeography,
+          )
+        : [],
+    [catalog, selectedGeography, topic],
+  );
+  const selectedIndicator = indicators.find(
+    (indicator) => indicator.id === indicatorId,
+  );
+  const availableSources = catalog
+    ? sourcesForSelection(catalog, selectedGeography, selectedIndicator)
+    : [];
+
+  const selectionKey = `${geographyId}:${indicatorId}:${sourceId}`;
+
+  useEffect(() => {
+    if (!geographyId || !indicatorId || !sourceId) return;
+
+    const controller = new AbortController();
+    const query = new URLSearchParams({
+      geography_id: geographyId,
+      indicator_id: indicatorId,
+      source_id: sourceId,
+    });
+
+    getJson<{ observations: Observation[] }>(
+      `/api/observations/?${query.toString()}`,
+      controller.signal,
+    )
+      .then((data) => {
+        setObservationResult({
+          key: `${geographyId}:${indicatorId}:${sourceId}`,
+          rows: data.observations,
+        });
+        setObservationError(null);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setObservationError({
+            key: `${geographyId}:${indicatorId}:${sourceId}`,
+            message:
+              error instanceof Error ? error.message : "Could not load housing records.",
+          });
+        }
+      });
+
+    return () => controller.abort();
+  }, [geographyId, indicatorId, sourceId]);
+
+  const observations =
+    observationResult?.key === selectionKey ? observationResult.rows : null;
+  const currentError =
+    observationError?.key === selectionKey ? observationError.message : null;
+  const loadingObservations =
+    Boolean(geographyId && indicatorId && sourceId) &&
+    observations === null &&
+    currentError === null;
+
+  const selectedSource = availableSources.find(
+    (source) => source.id === sourceId,
+  );
+
+  const rentShareValue = Number(rentSharePercent);
+  const hasValidRentShare =
+    rentSharePercent.trim() !== "" &&
+    Number.isFinite(rentShareValue) &&
+    rentShareValue >= 0 &&
+    rentShareValue <= 100;
+  const monthlyRentBudget = calculateMonthlyRentBudget(
+    annualIncome,
+    rentSharePercent,
+  );
+    useEffect(() => {
+    localStorage.setItem(
+      "mcp-canada-budget-preferences",
+      JSON.stringify({
+        before_tax_income: annualIncome.trim()
+          ? Number(annualIncome) / 12
+          : null,
+        monthly_rent: monthlyRentBudget,
+      })
+    );
+
+    window.dispatchEvent(new Event("budget-preferences-change"));
+  }, [annualIncome, monthlyRentBudget]);
+
+  const chartRows = (observations ?? []).filter(
+    (row) => row.status === "observed" && row.value !== null,
+  );
+  const chartMaximum = Math.max(
+    1,
+    ...chartRows.map((row) => Math.abs(Number(row.value))),
+  );
 
   return (
     <div className={styles.page}>

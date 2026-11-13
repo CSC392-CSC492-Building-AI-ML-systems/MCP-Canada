@@ -20,6 +20,25 @@ function subscribeSaved(callback: () => void) {
   window.addEventListener('saved-housing-change', callback);
   return () => { window.removeEventListener('storage', callback); window.removeEventListener('saved-housing-change', callback); };
 }
+const budgetStorageKey = "mcp-canada-budget-preferences";
+
+function subscribeBudget(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener("budget-preferences-change", callback);
+
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener("budget-preferences-change", callback);
+  };
+}
+
+function readBudgetPreferences() {
+  try {
+    return localStorage.getItem(budgetStorageKey) ?? "";
+  } catch {
+    return "";
+  }
+}
 function readSaved() { try { return localStorage.getItem(savedKey) || '[]'; } catch { return '[]'; } }
 /** Shared selection is owned here. A teammate can mount the map with renderMap
  * and route map clicks through onSelectionChange; the panel and timeline sync. */
@@ -38,8 +57,34 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = [] }: {
   const viewSelection = preview ?? selection;
   const [result, setResult] = useState<{ key: string; profile: NeighbourhoodProfile } | null>(null);
   const [profileError, setProfileError] = useState<{ key: string; message: string } | null>(null);
-  const [income, setIncome] = useState('');
-  const [budget, setBudget] = useState('');
+    const storedBudget = useSyncExternalStore(
+    subscribeBudget,
+    readBudgetPreferences,
+    () => ""
+  );
+
+  const savedBudget = useMemo(() => {
+    try {
+      return storedBudget ? JSON.parse(storedBudget) : null;
+    } catch {
+      return null;
+    }
+  }, [storedBudget]);
+
+  const [incomeOverride, setIncomeOverride] = useState<string | null>(null);
+  const [budgetOverride, setBudgetOverride] = useState<string | null>(null);
+
+  const income =
+    incomeOverride ??
+    (savedBudget?.before_tax_income != null
+      ? String(savedBudget.before_tax_income * 12)
+      : "");
+
+  const budget =
+    budgetOverride ??
+    (savedBudget?.monthly_rent != null
+      ? String(savedBudget.monthly_rent)
+      : "");
   const storedSaved = useSyncExternalStore(subscribeSaved, readSaved, () => '[]');
   const [sessionSaved, setSessionSaved] = useState<SavedPlace[] | null>(null);
   const saved = useMemo(() => {
@@ -92,7 +137,7 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = [] }: {
 
   useEffect(() => {
     if (profile && !budgetAnchorHandled.current && window.location.hash === '#budget-title') {
-      document.getElementById('budget-title')?.scrollIntoView({block:'center'});
+      document.getElementById('budget-title')?.scrollIntoView({ block: 'center' });
       budgetAnchorHandled.current = true;
     }
   }, [profile]);
@@ -168,8 +213,22 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = [] }: {
             <select aria-label="Boundary set" value={viewSelection?.boundarySetId ?? selection.boundarySetId} onChange={e => void switchBoundarySet(sets.find(s => s.id === e.target.value)!)}>{sets.map(s => <option key={s.id} value={s.id}>{s.label} neighbourhoods · {s.years.join(', ')}</option>)}</select>} />
         </div>}
       </section>
-      {profile ? acrossTime ? <AcrossTimePanel key={profile.geography.id} profile={profile} onCompare={addSelected} saved={isSaved} limitReached={saved.length >= 5} /> : <NeighbourhoodDetailsPanel profile={profile} income={income} budget={budget} onIncomeChange={setIncome} onBudgetChange={setBudget} saved={isSaved} limitReached={saved.length >= 5} onCompare={addSelected} /> : <aside className={styles.detailsPanel}><div className={styles.panelScroll} role={error ? 'alert' : 'status'}><span className={styles.kicker}>NEIGHBOURHOOD DETAILS</span><h2>{error ? 'Could not load this selection' : loadError ? 'Waiting for published data' : 'Loading housing data…'}</h2><p>{error || loadError || 'Finding the selected Census period and its sources.'}</p>{error && <button className={styles.secondaryButton} onClick={() => setSelection(s => s ? { ...s } : null)}>Try again</button>}</div></aside>}
+      {profile ? <NeighbourhoodDetailsPanel profile={profile} income={income} budget={budget} onIncomeChange={setIncomeOverride}
+onBudgetChange={setBudgetOverride} saved={isSaved} limitReached={saved.length >= 5} onCompare={() => {
+        if (!isSaved && saved.length < 5) savePlaces([...saved, { id: profile.geography.id, name: profile.geography.name, year: profile.year, boundary: profile.geography.boundary_set }]);
+      }} /> : <aside className={styles.detailsPanel}><div className={styles.panelScroll} role={error ? 'alert' : 'status'}><span className={styles.kicker}>NEIGHBOURHOOD DETAILS</span><h2>{error ? 'Could not load this selection' : loadError ? 'Waiting for published data' : 'Loading housing data…'}</h2><p>{error || loadError || 'Finding the selected Census period and its sources.'}</p>{error && <button className={styles.secondaryButton} onClick={() => setSelection(s => s ? { ...s } : null)}>Try again</button>}</div></aside>}
     </main>
-    <dialog className={styles.savedDialog} ref={dialog} aria-labelledby="comparison-title"><div className={styles.dialogHeading}><h2 id="comparison-title">Side-by-side comparison</h2><button autoFocus type="button" aria-label="Close comparison" onClick={() => dialog.current?.close()}>×</button></div><PlaceComparison places={comparison} catalog={catalog} sets={sets} /></dialog>
+    <dialog className={styles.savedDialog} ref={dialog} aria-labelledby="saved-title"><div className={styles.dialogHeading}><h2 id="saved-title">Saved for comparison</h2><button autoFocus type="button" aria-label="Close saved places" onClick={() => dialog.current?.close()}>×</button></div><p>Up to five places. The shared comparison view will use these selections.</p>{storageNotice && <p role="status">{storageNotice}</p>}{saved.length === 0 ? <p>No places saved yet. Choose “Add to compare” in the details panel.</p> : <ul>{saved.map(place => <li key={`${place.id}:${place.year}`}><div><strong>{place.name}</strong><span>{place.year} Census · {place.boundary}</span></div><button type="button" aria-label={`Remove ${place.name} ${place.year}`} onClick={() => savePlaces(saved.filter(s => s !== place))}>Remove</button></li>)}</ul>}<div>
+      <Link href="/comparison/" className={styles.primaryButton}>
+        Compare saved places →
+      </Link>
+      <button
+        type="button"
+        className={styles.secondaryButton}
+        onClick={() => dialog.current?.close()}
+      >
+        Continue exploring
+      </button>
+    </div></dialog>
   </div>;
 }
