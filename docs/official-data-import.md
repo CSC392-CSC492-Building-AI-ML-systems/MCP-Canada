@@ -20,7 +20,25 @@ backend/.venv/bin/python backend/manage.py data_inventory
 To fetch a missing raw snapshot, add `--download` to the preparation command. This
 only accepts bytes matching the pinned digest. Live endpoints, especially CPI,
 GTFS and OpenStreetMap, change: if a digest differs, retain the old snapshot and
-review a new manifest/release rather than changing its checksum blindly. The
+review a new manifest/release rather than changing its checksum blindly.
+
+A file that fails to download or no longer matches its digest is skipped, and the
+run continues with the remaining files; a `SKIPPED <file>: <reason>` list is
+printed at the end. Busy-server answers (HTTP 429/502/503/504) and timeouts are
+retried after 10, 30 and 60 seconds. After reviewing a changed source, accept the
+new snapshot with `--download --refresh <file>` (repeatable): it downloads that
+file again and records its new SHA-256 and `retrieved_at` in
+`data/official-sources.json`.
+
+Sources marked `"live": true` have no pinned digest, because their bytes differ on
+every request. Currently this is only OpenStreetMap (Overpass), whose answer
+includes its database timestamp. `--download` saves the newest copy in `data/raw/`
+and writes its SHA-256 and `retrieved_at` to `data/raw/<file>.meta.json`, which the
+normalizer uses as the source's release and retrieval date. Later runs reuse the
+saved copy; `--refresh <file>` replaces it and updates only the `.meta.json`.
+Teammates' live snapshots can therefore differ. Requests send the User-Agent
+`MCP-Canada-student-project/0.1`, because Overpass rejects Python's default one
+with HTTP 406. The
 normalizer derives release IDs from file checksums, so a new reviewed snapshot is
 a distinct release. Consumers must explicitly choose a release to avoid double
 counting repeated/overlapping periods.
