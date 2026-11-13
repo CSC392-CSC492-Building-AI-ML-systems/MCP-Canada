@@ -12,6 +12,8 @@ export type Measurement = {
 export type NeighbourhoodProfile = {
   geography: { id: string; name: string; code: string; boundary_set: string; boundary_version: string };
   year: number; available_years: number[];
+  /** Set when the values come from the same, unchanged area in another boundary set. */
+  data_geography?: { id: string; name: string; boundary_set: string };
   metrics: { cost: Measurement; income: Measurement; burden: Measurement };
   history: { year: number; cost: Measurement }[];
   method: { housing: string; comparison: string; income: string; inflation: string; release_selection: string };

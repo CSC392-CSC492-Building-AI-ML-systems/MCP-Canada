@@ -18,14 +18,14 @@ export function ComparisonTable({ profiles, preferences }: { profiles: Neighbour
     return n === null ? "—" : m.unit?.startsWith("CAD") ? money(n) : m.unit === "percent" ? `${n.toFixed(1)}%` : n.toLocaleString("en-CA");
   };
   return <div className={styles.tableScroll}><table className={styles.compareTable} style={{ minWidth: 220 + profiles.length * 272 }}><caption className={styles.srOnly}>Neighbourhoods compared for one shared Census year and boundary set</caption><thead><tr><th scope="col">{profiles[0]?.year} snapshot</th>{profiles.map(p => <th key={p.geography.id} scope="col">
-    <ComparisonMap geographyId={p.geography.id} boundarySetId={p.geography.boundary_set} name={p.geography.name} /><Link href={`/housing/?neighbourhood=${encodeURIComponent(p.geography.id)}&year=${p.year}`}>{p.geography.name}</Link><small>Toronto · {p.year} Census<br />Live map · present-day basemap</small></th>)}</tr></thead><tbody>
+    <ComparisonMap geographyId={p.geography.id} boundarySetId={p.geography.boundary_set} name={p.geography.name} /><Link href={`/housing/?neighbourhood=${encodeURIComponent(p.data_geography?.id ?? p.geography.id)}&year=${p.year}`}>{p.geography.name}</Link><small>Toronto · {p.year} Census<br />Live map · present-day basemap</small></th>)}</tr></thead><tbody>
     <tr><th scope="row">Overall match score</th>{profiles.map(p => <td key={p.geography.id}>—</td>)}</tr>
     <tr><th scope="row">Renter shelter / month</th>{profiles.map((p, i) => <td key={p.geography.id} className={costs[i] !== null && costs[i] === cheapest ? styles.best : undefined}>{show(p, "cost")}</td>)}</tr>
     <tr><th scope="row">Published household income / year</th>{profiles.map(p => <td key={p.geography.id}>{show(p, "income")}</td>)}</tr>
     <tr><th scope="row">Share of your entered income</th>{profiles.map((p, i) => <td key={p.geography.id}>{costs[i] !== null && preferences?.income && Number(preferences.income) > 0 ? `${(costs[i]! / (Number(preferences.income) / 12) * 100).toFixed(1)}%` : "—"}</td>)}</tr>
     <tr><th scope="row">Within your rent budget</th>{profiles.map((p, i) => <td key={p.geography.id}>{costs[i] !== null && preferences ? costs[i]! <= Number(preferences.rent) ? "Yes" : "No" : "—"}</td>)}</tr>
-    <tr><th scope="row">Published housing burden{profiles[0]?.metrics.burden.unit === "households" ? " (households)" : " (%)"}</th>{profiles.map(p => <td key={p.geography.id}>{show(p, "burden")}</td>)}</tr>
+    <tr><th scope="row">Published housing burden{profiles.find(p => p.metrics.burden.unit)?.metrics.burden.unit === "households" ? " (households)" : " (%)"}</th>{profiles.map(p => <td key={p.geography.id}>{show(p, "burden")}</td>)}</tr>
     {["To work", "To school", "Schools within 1 km", "Nearest grocery", "Transit stops within 1 km", "Parks within 1 km", "Safety", "Lifestyle match"].map(label => <tr key={label}><th scope="row">{label}</th>{profiles.map(p => <td key={p.geography.id}>—</td>)}</tr>)}
-    <tr><th scope="row">Data gaps</th>{profiles.map(p => <td key={p.geography.id}>Commute, amenities, safety, lifestyle{measuredNumber(p.metrics.cost) === null ? ", shelter cost" : ""}</td>)}</tr>
+    <tr><th scope="row">Data gaps</th>{profiles.map(p => <td key={p.geography.id}>{p.available_years.length === 0 ? `No ${p.year} Census data for this area (boundaries changed in 2021). ` : ""}Commute, amenities, safety, lifestyle{measuredNumber(p.metrics.cost) === null ? ", shelter cost" : ""}</td>)}</tr>
   </tbody></table></div>;
 }
