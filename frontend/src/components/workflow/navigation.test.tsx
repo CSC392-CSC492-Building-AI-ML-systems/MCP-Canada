@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), usePathname: () => "/" }));
+import { HomePage } from "../home/HomePage";
 import PersonalizePage from "@/app/housing/personalize/page";
 import ProfilePage from "@/app/housing/profile/page";
 import { WorkflowHeader } from "./WorkflowHeader";
@@ -25,4 +26,11 @@ it("comparison navigation leads back to the map and the editable profile", () =>
   expect(html).toMatch(/href="\/housing\/?"/);
   expect(html).toMatch(/href="\/housing\/profile\/?"/);
   expect(html).toContain('aria-current="page"');
+});
+
+it("landing starts at the choice page instead of bypassing the two workflows", () => {
+  const html = renderToStaticMarkup(createElement(HomePage));
+  expect(html).toMatch(/href="\/housing\/personalize\/?"/);
+  expect(html).toContain("Open 3D Map Explorer");
+  expect(html).not.toContain("coming next");
 });

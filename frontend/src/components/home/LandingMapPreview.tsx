@@ -56,26 +56,19 @@ export default function LandingMapPreview() {
   const openLabel = featured ? `Open ${featured.name} in the 3D Map Explorer` : "Open the 3D Map Explorer";
   const href = featured ? `/housing/?neighbourhood=${encodeURIComponent(featured.id)}` : "/housing/";
 
-  return <>
-    <div className={styles.previewCard}>
-      <div className={styles.previewHeader}>
-        <div><span className={styles.previewDot} />{featured ? `${featured.name}, Toronto` : "Toronto"}</div>
-        <span className={styles.previewBadge}>Live map</span>
-      </div>
-      {showMap
-        ? <>
-            <MapView preview selected={null} boundaries={boundaries} selectedGeographyId={featured?.id} className={styles.previewMap} />
-            <Link href={href} className={styles.previewLink} aria-label={openLabel} />
-            <p className={styles.mapCaption}>Present-day basemap · not historical imagery</p>
-          </>
-        : <p className={styles.previewFallback}>The map preview can&apos;t load here. <Link href={href}>Open the explorer</Link> to browse Toronto&apos;s neighbourhoods.</p>}
+  return <div className={styles.previewCard}>
+    <div className={styles.previewHeader}><div>{featured ? `${featured.name}, Toronto` : "Toronto"}</div><span className={styles.previewBadge}>Live 3D preview</span></div>
+    <div className={styles.previewStage}>
+      {showMap ? <>
+        <MapView preview selected={null} boundaries={boundaries} selectedGeographyId={featured?.id} className={styles.previewMap} />
+        <Link href={href} className={styles.previewLink} aria-label={openLabel} />
+        <p className={styles.mapCaption}>Present-day basemap</p>
+      </> : <p className={styles.previewFallback}>The map preview can&apos;t load here. <Link href={href}>Open the explorer</Link> to browse Toronto&apos;s neighbourhoods.</p>}
+      {activeYear !== undefined && <div className={styles.previewTimeline}>
+        <div><p className={styles.kicker}>MOVE THROUGH TIME</p><span>{activeYear}</span></div>
+        <div className={styles.previewYears} role="group" aria-label="Choose a Census year">{years.map(y => <button type="button" key={y} aria-pressed={y === activeYear} onClick={() => setYear(y)}><span />{y}</button>)}</div>
+      </div>}
     </div>
-    {activeYear !== undefined && <div className={styles.previewTimeline}>
-      <div><p className={styles.kicker}>MOVE THROUGH TIME</p><span>{activeYear}</span></div>
-      <div className={styles.previewYears} role="group" aria-label="Choose a Census year">
-        {years.map((y) => <button type="button" key={y} aria-pressed={y === activeYear} onClick={() => setYear(y)}><span />{y}</button>)}
-      </div>
-      <p>{sets.map((s) => `${s.years[0]}${s.years.length > 1 ? `–${s.years.at(-1)}` : ""}: ${s.neighbourhoods.length} neighbourhoods`).join(" · ")}</p>
-    </div>}
-  </>;
+    <p className={styles.previewFootnote}>Browse in 3D · Scrub the timeline · See data change</p>
+  </div>;
 }

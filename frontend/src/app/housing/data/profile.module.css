@@ -5,7 +5,7 @@
   background: #f5f1e3;
   color: #22382a;
   min-height: 100vh;
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: var(--font-dm-sans), "DM Sans", Arial, sans-serif;
 }
 .nav {
   display: flex;
@@ -29,7 +29,7 @@
 .nav [aria-disabled] { color: #5e6a60; }
 .main { max-width: 1440px; padding: 40px; }
 .intro { margin-bottom: 24px; }
-.intro h1 { font-size: clamp(2rem, 4vw, 2.75rem); line-height: 1.13; margin: 8px 0; }
+.intro h1 { font-size: clamp(1.8rem, 3vw, 2.125rem); line-height: 1.13; margin: 8px 0; }
 .intro p:last-child { margin: 0; max-width: 65ch; }
 .eyebrow { margin: 0; font-weight: 800; font-size: .75rem; letter-spacing: .08em; color: var(--profile-green); }
 .samples, .chips { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -59,7 +59,7 @@
   width: 100%;
   min-width: 0;
   border: 1px solid var(--profile-line);
-  background: white;
+  background: #f5f1e3;
   color: inherit;
   font: inherit;
   font-weight: 400;
@@ -92,3 +92,6 @@
   .threeColumns, .twoColumns { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .card, .actions { padding: 18px; }
 }
+
+.profileTools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
+.profileTools a { font-size: 12px; color: var(--profile-green); }

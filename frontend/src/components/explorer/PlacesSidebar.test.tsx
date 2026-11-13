@@ -27,5 +27,5 @@ it("02B2 renders supplied recommendations with their summaries", () => {
   expect(html).not.toContain("Remove Test neighbourhood");
 });
 it("shows an honest empty state when recommendations are not connected", () => {
-  expect(render("recommended")).toContain("Personalized recommendations are not connected yet");
+  expect(render("recommended")).toContain("No starting points are available yet");
 });

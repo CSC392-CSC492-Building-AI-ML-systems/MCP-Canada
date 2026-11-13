@@ -10,7 +10,9 @@ export default function PersonalizePage() {
       <header className={styles.header}>
         <Link href="/" className={styles.brand}>NEIGHBOURHOOD / EXPLORER</Link>
         <p className={styles.steps}>PERSONALIZE → EXPLORE → COMPARE</p>
-        <Link href="/housing/data/" className={styles.profile}>Your profile</Link>
+        <Link href="/housing/profile/" className={styles.profile} aria-label="Open your profile">
+          {/* eslint-disable-next-line @next/next/no-img-element -- local Figma icon */}
+          <img src="/icons/explorer/profile.svg" width={24} height={24} alt="" /></Link>
       </header>
       <main className={styles.main}>
         <p className={styles.kicker}>BEFORE YOU EXPLORE</p>
@@ -31,7 +33,7 @@ export default function PersonalizePage() {
               <li>Your priorities &amp; history interests</li>
             </ul>
             <div className={styles.action}>
-              <Link href="/housing/data/" className={styles.primary}>Fill out my profile <span aria-hidden="true">→</span></Link>
+              <Link href="/housing/profile/" className={styles.primary}>Fill out my preferences <span aria-hidden="true">→</span></Link>
               <p>Optional questions can be left blank.</p>
             </div>
           </section>
@@ -42,7 +44,7 @@ export default function PersonalizePage() {
             <p>Skip the profile and browse neighbourhoods and local history on the map.</p>
             <div className={styles.location}>
               <strong>Map preview starts in Toronto</strong>
-              <p>Location detection is simulated in the prototype. Search the map to choose another area.</p>
+              <p>Search the map to choose a Toronto neighbourhood, street or building.</p>
             </div>
             <div className={styles.action}>
               <Link href="/housing/" className={styles.secondary}>Skip for now · open the map <span aria-hidden="true">→</span></Link>
@@ -51,7 +53,7 @@ export default function PersonalizePage() {
         </div>
 
         <footer className={styles.footer}>
-          <p>Personalized neighbourhood recommendations are in development.</p>
+          <p>Budget-based starting points use published Census data. Other preference factors are shown as unavailable.</p>
           <Link href="/" className={styles.secondary}><span aria-hidden="true">←</span> Back to home</Link>
         </footer>
       </main>

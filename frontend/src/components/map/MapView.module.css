@@ -15,3 +15,9 @@
 .status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 180px 24px 48px; background: #f5f1e3; text-align: center; color: #292e29; }
 .status p { max-width: 360px; margin: 12px 0; font-size: 13px; }
 .status button { padding: 10px 18px; border: 0; border-radius: 8px; background: #295738; color: #fbfbf9; cursor: pointer; }
+
+.compactControls { position: absolute; top: 8px; right: 8px; display: grid; z-index: 2; border-radius: 6px; overflow: hidden; }
+.compactControls button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid #cccfc4; background: #fbfbf9; color: #295738; font: inherit; font-size: 17px; cursor: pointer; }
+.compactControls button:focus-visible { outline: 2px solid #295738; outline-offset: -3px; }
+.compactStatus { padding: 12px; font-size: 11px; }
+.compactStatus p { margin: 5px 0; font-size: 10px; line-height: 1.35; }

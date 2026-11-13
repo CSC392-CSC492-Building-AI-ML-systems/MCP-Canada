@@ -4,8 +4,8 @@ import { measuredNumber, money } from "./NeighbourhoodDetailsPanel";
 import type { NeighbourhoodProfile } from "./types";
 import styles from "./explorer.module.css";
 
-export function AcrossTimePanel({ profile, onCompare, saved, limitReached }: {
-  profile: NeighbourhoodProfile; onCompare: () => void; saved: boolean; limitReached: boolean;
+export function AcrossTimePanel({ profile, onCompare, saved, limitReached, onAskTeacher }: {
+  profile: NeighbourhoodProfile; onCompare: () => void; saved: boolean; limitReached: boolean; onAskTeacher?: () => void;
 }) {
   const [chosen, setChosen] = useState<number[]>([]);
   const scroll = useRef<HTMLDivElement>(null);
@@ -26,6 +26,6 @@ export function AcrossTimePanel({ profile, onCompare, saved, limitReached }: {
       <h2>Historical context by period</h2>{periods.map((year, i) => <section className={styles.contextCard} key={i}><h2>{year} · investigate</h2><p>How did housing costs and the surrounding community change during this period?</p><p className={styles.caption}>No verified historical accounts linked.</p></section>)}
       <section className={styles.panelSection}><h2>Sources &amp; comparison method</h2><p className={styles.caption}>{profile.method.comparison}</p>{costs.map((m, i) => m?.source && <div className={styles.sourceItem} key={i}><a href={m.source.url} target="_blank" rel="noreferrer">{periods[i]} · {m.source.title} ↗</a><p>{m.label}</p><p>{m.source.publisher} · Reference year {m.reference_year}</p></div>)}</section>
     </div>
-    <footer className={styles.panelActions}><button type="button" className={styles.primaryButton} disabled={saved || limitReached} onClick={onCompare}>{saved ? "Added to compare ✓" : limitReached ? "5 places saved" : "Add to compare"}</button><button type="button" className={styles.secondaryButton} disabled title="AI teacher is not connected yet">Ask the AI teacher</button></footer>
+    <footer className={styles.panelActions}><button type="button" className={styles.primaryButton} disabled={saved || limitReached} onClick={onCompare}>{saved ? "Added to compare ✓" : limitReached ? "5 places saved" : "Add to compare"}</button><button type="button" className={styles.secondaryButton} onClick={onAskTeacher} disabled={!onAskTeacher}>Ask the AI teacher</button></footer>
   </aside>;
 }

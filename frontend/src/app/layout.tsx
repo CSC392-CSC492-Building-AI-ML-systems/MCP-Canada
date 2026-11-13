@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { DM_Sans } from "next/font/google";
+import { TeacherProvider } from "@/components/workflow/Teacher";
+
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
 
 export const metadata: Metadata = {
   title: "Neighbourhood Explorer | MCP Canada",
@@ -7,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body className={dmSans.variable}><TeacherProvider>{children}</TeacherProvider></body></html>;
 }

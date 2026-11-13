@@ -1,8 +1,3 @@
-"use client";
+import { HousingExplorer } from "@/components/map/HousingExplorer";
 
-import { ExplorationWorkspace } from "@/components/explorer/ExplorationWorkspace";
-import HousingMap from "@/components/map/HousingMap";
-
-export default function HousingPage() {
-  return <ExplorationWorkspace renderMap={(selection, onSelectionChange) => <HousingMap selection={selection} onSelectionChange={onSelectionChange} />} />;
-}
+export default function HousingPage() { return <HousingExplorer />; }

@@ -5,7 +5,8 @@ import { HousingExplorer } from "@/components/map/HousingExplorer";
 import { loadWorkspaceData } from "@/components/explorer/data";
 import type { ExplorerPlace } from "@/components/explorer/PlacesSidebar";
 import { RECOMMENDED_KEY, readProfile, writeSession } from "@/components/workflow/state";
-import { budgetStartingPoints, type CostRow } from "@/components/workflow/recommendations";
+import { budgetStartingPoints } from "@/components/workflow/recommendations";
+import { loadCostRows } from "@/components/workflow/recommendation-data";
 import styles from "@/components/workflow/workflow.module.css";
 
 export default function RecommendedMapPage() {
@@ -18,13 +19,8 @@ export default function RecommendedMapPage() {
       const profile = readProfile();
       if (!profile) { setError("Complete your profile to find budget-based starting points."); return; }
       const { catalog } = await loadWorkspaceData(abort.signal);
-      const releases = catalog.sources.filter(source => source.id.startsWith("census-2021-"));
-      if (releases.length !== 1) throw new Error("A unique reviewed 2021 Census release is required. You can still explore and save places manually.");
-      const params = new URLSearchParams({ source_id: releases[0].id, indicator_id: "census-2021-row-380", geography_set_id: "toronto-158" });
-      const response = await fetch(`/api/observations/batch/?${params}`, { signal: abort.signal });
-      if (!response.ok) throw new Error("Could not load housing benchmarks. Try again or explore the map directly.");
-      const data: { observations: CostRow[] } = await response.json();
-      const places = budgetStartingPoints(data.observations, profile);
+      const rows = await loadCostRows(catalog, abort.signal);
+      const places = budgetStartingPoints(rows, profile);
       if (abort.signal.aborted) return;
       writeSession(RECOMMENDED_KEY, JSON.stringify(places));
       setResult({ places, notice: profile.weights[0] === 0 ? "Affordability has zero weight. Enable it in your profile to find budget-based starting points; other matching factors are unavailable." : "Starting points within your budget, ordered by lowest published 2021 shelter cost. If none fit, the lowest available benchmarks are marked above budget. These are Census benchmarks, not current listings or bedroom-specific rents. Commute, lifestyle, safety and overall match scores are unavailable." });

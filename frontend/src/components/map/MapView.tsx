@@ -21,6 +21,8 @@ type Props = {
   showTransit?: boolean;
   // Display-only map for the landing page: no controls, panning or zooming by the user.
   preview?: boolean;
+  compact?: boolean;
+  label?: string;
   className?: string;
 };
 
@@ -32,7 +34,7 @@ const FIT = { padding: { top: 170, bottom: 60, left: 60, right: 90 }, maxZoom: 1
 const PREVIEW_FIT = { padding: { top: 90, bottom: 50, left: 50, right: 50 }, maxZoom: 13, pitch: 50 };
 const isSelected = (id: string) => ["==", ["get", "geography_id"], id];
 
-export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, preview = false, className }: Props) {
+export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, preview = false, compact = false, label = "Map of Toronto", className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -67,6 +69,7 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
         style: "mapbox://styles/mapbox/standard",
         ...HOME,
         interactive: !preview,
+        scrollZoom: !compact,
         maxBounds: [
           [TORONTO_BBOX[0] - 0.3, TORONTO_BBOX[1] - 0.2],
           [TORONTO_BBOX[2] + 0.3, TORONTO_BBOX[3] + 0.2],
@@ -88,7 +91,7 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     // The workspace can resize independently of the browser (panels, mobile layout).
     const resize = new ResizeObserver(() => map.resize());
     resize.observe(containerRef.current);
-    if (!preview) map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
+    if (!preview && !compact) map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
     mapRef.current = map;
     // Only the place popup has a close button. Popup "close" events can't be used:
     // they also fire when the user clicks elsewhere on the map.
@@ -138,7 +141,7 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       mapRef.current = null;
       map.remove();
     };
-  }, [preview]);
+  }, [preview, compact]);
 
   useEffect(() => {
     if (!ready) return;
@@ -154,15 +157,15 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     const feature = boundaries?.features.find((f) => f.properties.geography_id === selectedGeographyId);
     if (fromClick) return;
     if (feature) {
-      const fit = preview ? PREVIEW_FIT : FIT;
+      const fit = compact ? { padding: { top: 12, bottom: 35, left: 12, right: 12 }, maxZoom: 14, pitch: 45, duration: 0 } : preview ? PREVIEW_FIT : FIT;
       const narrow = map.getContainer().clientWidth < 900;
       map.fitBounds(boundsOf(feature.geometry), {
         ...fit,
-        padding: !preview && narrow ? { top: 230, bottom: 45, left: 24, right: 70 } : fit.padding,
+        padding: !compact && !preview && narrow ? { top: 230, bottom: 45, left: 24, right: 70 } : fit.padding,
         pitch: flatRef.current ? 0 : fit.pitch,
       });
     }
-  }, [ready, boundaries, selectedGeographyId, preview]);
+  }, [ready, boundaries, selectedGeographyId, preview, compact]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -186,11 +189,15 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
   }, [selected, ready]);
 
   return <div className={className}>
-    <div ref={containerRef} className={styles.canvas} aria-label="Map of Toronto" role="region" />
-    {mapError ? <div className={styles.status} role="alert"><strong>Map unavailable</strong><p>{mapError}</p><button type="button" onClick={() => window.location.reload()}>Try again</button></div>
+    <div ref={containerRef} className={styles.canvas} aria-label={label} role="region" />
+    {mapError ? <div className={`${styles.status} ${compact ? styles.compactStatus : ""}`} role="alert"><strong>Map unavailable</strong><p>{mapError}</p><button type="button" onClick={() => window.location.reload()}>Try again</button></div>
       : !ready && <div className={styles.loading} role="status">Loading the map…</div>}
+    {compact && !preview && <div className={styles.compactControls} role="group" aria-label={`${label} controls`}>
+      <button type="button" aria-label={`Zoom in on ${label}`} onClick={() => mapRef.current?.zoomIn()}>+</button>
+      <button type="button" aria-label={`Zoom out on ${label}`} onClick={() => mapRef.current?.zoomOut()}>−</button>
+    </div>}
     {/* The landing preview is display-only, so it has no controls. */}
-    {!preview && <div className={styles.controls} role="group" aria-label="Map controls">
+    {!preview && !compact && <div className={styles.controls} role="group" aria-label="Map controls">
       <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => mapRef.current?.zoomIn()}>+</button>
       <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => mapRef.current?.zoomOut()}>−</button>
       <button type="button" aria-label="Reset rotation" title="Reset rotation" onClick={() => mapRef.current?.easeTo({ bearing: HOME.bearing, pitch: flat ? 0 : HOME.pitch })}>↻</button>
