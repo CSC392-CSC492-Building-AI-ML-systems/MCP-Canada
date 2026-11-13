@@ -1,0 +1,82 @@
+.page { min-height: 100dvh; color: #1a1f1a; background: #f5f4ec; font-family: var(--font-dm-sans), "DM Sans", Arial, sans-serif; }
+.page h1 { font-size: 30px; line-height: 1.4; letter-spacing: -.02em; margin: 14px 0; }
+.page h2 { font-size: 22px; margin: 24px 0 14px; }
+.page h3 { font-size: 15px; margin: 0 0 8px; }
+.page p { line-height: 1.5; }
+.page :is(button,input,select,textarea) { font: inherit; }
+.page :is(a,button,input,select,textarea):focus-visible { outline: 3px solid #718c5a; outline-offset: 3px; }
+.header { display: flex; align-items: center; gap: 16px; min-height: 72px; padding: 14px 24px 14px 20px; background: #fbfbf9; }
+.brand { color: #295738; text-decoration: none; font-size: 14px; font-weight: 700; flex: 0 0 244px; }
+.context { display: block; padding: 9px 10px; width: 180px; border-radius: 12px; background: #f5f1e3; color: #295738; font-size: 12px; font-weight: 600; }
+.header nav { display: flex; gap: 16px; align-items: center; margin-left: auto; }
+.header nav a { min-width: 164px; padding: 10px; border-radius: 12px; color: #295738; background: #f5f1e3; font-size: 12px; font-weight: 600; text-decoration: none; }
+.header nav a[aria-current] { color: #fbfbf9; background: #295738; }
+.header nav span { color: #a84f2b; font-size: 10px; font-weight: 700; }
+.profile { display: grid; place-items: center; flex: 0 0 44px; height: 44px; margin-left: auto; background: #f5f1e3; border: 1px solid #295738; border-radius: 50%; }
+.comparisonLayout { display: grid; grid-template-columns: minmax(0,1fr) 340px; height: calc(100dvh - 72px); min-height: 600px; }
+.comparisonMain { width: 100%; max-width: none; min-width: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 28px; }
+.kicker { margin: 0 0 12px; font-size: 10px; font-weight: 700; color: #295738; letter-spacing: .025em; }
+.intro { margin: 0 0 20px; color: #646659; font-size: 13px; }
+.caption { color: #646659; font-size: 11px; }
+.periodRow { display: grid; grid-template-columns: minmax(160px,1fr) 3fr; gap: 12px; margin: 20px 0; }
+.periodRow > label,.periodRow > div { display: flex; flex-direction: column; gap: 8px; padding: 14px; background: #fbfbf9; border-radius: 10px; font-size: 12px; }
+.periodRow > label { background: #f5f1e3; font-size: 10px; color: #295738; }
+.periodRow select { width: 100%; background: transparent; border: 0; color: #295738; font-size: 14px; font-weight: 700; }
+.periodRow p { margin: 0; }
+.periodRow a { color: #295738; font-size: 11px; }
+.selectionTools { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.selectedChips { display: flex; flex-wrap: wrap; width: 100%; gap: 6px; }
+.selectedChips button { padding: 6px 9px; color: #295738; background: #e6ecdd; border: 1px solid #cccfc4; border-radius: 16px; font-size: 11px; cursor: pointer; }
+.selectionTools label { display: grid; gap: 5px; flex: 1; font-size: 12px; min-width: 180px; }
+.selectionTools select { min-width: 0; padding: 10px; border: 1px solid #d6cfba; border-radius: 8px; color: #295738; background: #fbfbf9; }
+.tableScroll { overflow-x: auto; border: 1px solid #d6cfba; border-radius: 10px; background: #fbfbf9; }
+.compareTable { width: 100%; min-width: 700px; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.compareTable th,.compareTable td { padding: 10px 12px; border-bottom: 1px solid #d6cfba; text-align: left; vertical-align: top; line-height: 1.5; }
+.compareTable th { font-weight: 500; }
+.compareTable thead th { padding: 10px 12px 14px; font-size: 14px; font-weight: 700; }
+.compareTable thead th:first-child { width: 220px; }
+.compareTable th a { color: #1a1f1a; text-decoration: none; }
+.compareTable th small { display: block; font-size: 10px; font-weight: 400; color: #646659; margin-top: 8px; }
+.compareTable tbody tr:nth-child(even) { background: #f3f2e9; }
+.compareTable td.best { color: #295738; background: #e6ecdd; font-weight: 700; }
+.evidenceCard { padding: 18px; border: 1px solid #d6cfba; border-radius: 10px; background: #fbfbf9; margin: 20px 0; }
+.evidenceCard h2 { margin-top: 0; }
+.evidenceCard p { font-size: 12px; color: #646659; }
+.evidenceCard > a { display: block; margin-top: 10px; color: #295738; font-size: 12px; }
+.evidenceCard > a.primary { display: inline-flex; color: #fbfbf9; }
+.contextGrid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 12px; margin: 20px 0; }
+.contextGrid section { padding: 16px; border-radius: 8px; background: #e6ecdd; }
+.contextGrid h3 { color: #295738; }
+.contextGrid p,.contextGrid a { font-size: 12px; color: #295738; line-height: 1.5; }
+.contextGrid small { display: block; margin-top: 14px; color: #a84f2b; font-size: 10px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0; }
+.primary,.secondary { display: inline-flex; justify-content: center; align-items: center; padding: 10px 16px; border: 1px solid #295738; border-radius: 8px; background: #295738; color: #fbfbf9; font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.secondary { background: #fbfbf9; color: #295738; border-color: #d6cfba; }
+.primary:disabled,.secondary:disabled { opacity: .5; cursor: not-allowed; }
+.empty { max-width: 900px; padding: 48px 28px; margin: auto; }
+.empty h1 { font-size: 32px; }
+.empty h2 { margin-top: 0; }
+.empty p { color: #646659; font-size: 14px; }
+.notice { margin: 18px 0; padding: 16px; border: 1px solid #d6cfba; border-radius: 10px; background: #f5f1e3; font-size: 12px; color: #87583a; }
+.notice h2 { margin: 0 0 8px; }
+.teacher { display: flex; flex-direction: column; gap: 10px; min-height: 0; height: 100%; padding: 20px; border-left: 1px solid #d6cfba; background: #fbfbf9; font-family: var(--font-dm-sans), "DM Sans", Arial, sans-serif; color: #1a1f1a; box-sizing: border-box; }
+.teacher header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.teacher h2 { margin: 0; color: #295738; font-size: 20px; }
+.teacher header button { width: 30px; height: 30px; background: none; border: 1px solid #d6cfba; border-radius: 50%; font-size: 22px; cursor: pointer; }
+.teacher > p { margin: 0; line-height: 1.5; }
+.teacherNotice { font-size: 10px; color: #a84f2b; }
+.teacherLog { overflow-y: auto; overscroll-behavior: contain; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+.answer { border-radius: 10px; background: #f5f1e3; padding: 14px; font-size: 12px; line-height: 1.6; white-space: pre-line; }
+.answer p { margin: 0; }
+.answer a { display: block; color: #295738; font-size: 10px; margin-top: 10px; }
+.question { border-radius: 10px; margin: 0 0 10px; padding: 14px; color: #fbfbf9; background: #295738; font-size: 12px; line-height: 1.5; }
+.teacherForm { display: grid; gap: 8px; flex-shrink: 0; }
+.teacherForm textarea { resize: vertical; min-height: 60px; max-height: 180px; padding: 12px; border: 1px solid #d6cfba; border-radius: 10px; color: #1a1f1a; background: #fbfbf9; font: inherit; font-size: 12px; }
+.prompts { display: grid; gap: 6px; }
+.prompts button { text-align: left; padding: 8px; background: #f5f1e3; border: 0; border-radius: 7px; color: #295738; font: inherit; font-size: 10px; cursor: pointer; }
+.teacherLauncher { position: fixed; bottom: 14px; left: 14px; z-index: 20; background: #295738; border: 1px solid #fbfbf9; border-radius: 24px; padding: 10px 16px; color: #fbfbf9; font-family: inherit; font-size: 12px; font-weight: 700; box-shadow: 0 2px 10px #173c3622; cursor: pointer; }
+.teacherDialog { position: fixed; inset: 0 0 0 auto; width: min(380px,100vw); height: 100dvh; max-height: none; max-width: none; margin: 0; padding: 0; border: 0; }
+.teacherDialog::backdrop { background: #1a261e44; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 1100px) { .context,.header nav span { display: none; } .brand { flex-basis: auto; } .header nav a { min-width: 130px; } .comparisonLayout { grid-template-columns: minmax(0,1fr) 300px; } .comparisonMain { padding: 24px 20px; } }
+@media (max-width: 760px) { .header { flex-wrap: wrap; padding: 16px; } .brand { flex: 1; font-size: 12px; } .header nav { order: 2; width: 100%; margin: 0; } .header nav a { flex: 1; text-align: center; } .comparisonLayout { display: flex; flex-direction: column; height: auto; min-height: 0; } .comparisonMain { overflow: visible; } .comparisonLayout > .teacher { min-height: 650px; max-height: 800px; border-left: 0; border-top: 1px solid #d6cfba; } .periodRow { grid-template-columns: 1fr; } .teacherLauncher { bottom: 10px; left: 10px; font-size: 11px; } }
