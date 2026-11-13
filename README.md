@@ -242,3 +242,4 @@ and [loaded data inventory](docs/data-import-status.md). To reproduce imports,
 use the pinned manifest and preparation script; local downloads and database files
 are ignored by Git. Run `backend/.venv/bin/python backend/manage.py data_inventory`
 to inspect the actual database.
+
