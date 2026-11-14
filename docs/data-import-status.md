@@ -1,6 +1,7 @@
 # Imported data status
 
-Loaded from 21 source snapshots into the local Django/SQLite database.
+Loaded from 23 source snapshots into the local Django/SQLite database (counts from a fresh
+`backend/scripts/setup_official_data.py` run).
 
 | Data | Loaded coverage |
 |---|---|
@@ -11,13 +12,16 @@ Loaded from 21 source snapshots into the local Django/SQLite database.
 | CPI | 321 monthly national all-items observations, January 2000–September 2026 |
 | School locations | 1,173 source records |
 | Physical library branches | 100 source records |
-| TTC GTFS stops/locations | 9,875 source records, including stations/entrances distinguished by source location_type |
-| Grocery-related OSM objects | 2,129 in the Toronto-area bounding box, including adjacent municipalities |
-| Park/green-space polygons | 3,274 source features; no assumed entrances |
+| TTC GTFS stops/locations | 9,826 source records, including stations/entrances distinguished by source location_type |
+| Grocery-related OSM objects | 2,128 in the Toronto-area bounding box, including adjacent municipalities; shop type kept (1,405 convenience, 618 supermarket, 105 greengrocer) |
+| Park/green-space polygons | 3,274 features (2018 parks file) and 3,383 current City Green Spaces features; no assumed entrances |
+| Green-space measures | 596 derived values: parks within 1 km and green-space share for every 140 and 158 neighbourhood (current snapshot) |
+| Places within 1 km | 1,192 derived counts (libraries, schools, supermarkets and greengrocers, TTC stops) plus 298 areas-within-1 km for every 140 and 158 neighbourhood (current snapshots) |
+| Toronto Police crime rates | 34,286 published counts and rates per 100,000 for 9 offence types, 2014–2025, on the 158 neighbourhoods |
 
-Database totals: **35,983 measurement records** (32,584 numeric, 2,240 missing,
-1,159 suppressed), **13,277 place records**, **33,413 original source-table rows**,
-**328 indicator definitions**, and **524 versioned geographic records**.
+Database totals: **72,355 measurement records** (68,956 numeric, 2,240 missing,
+1,159 suppressed), **13,227 place records**, **36,953 original source-table rows**,
+**354 indicator definitions**, and **524 versioned geographic records**.
 
 All source values are preserved. Incomplete or apparently misaligned source rows
 remain in staging instead of being silently corrected. Full source tables are

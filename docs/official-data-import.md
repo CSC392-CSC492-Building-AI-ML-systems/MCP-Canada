@@ -25,6 +25,13 @@ choose Historical 140 in its boundary selector to explore 2001, 2006, 2011 and
 2016. Changing the year updates the selected Census data, not the present-day
 Mapbox imagery. Missing and suppressed source cells remain unavailable.
 
+## One-command setup
+
+For a full local setup, including the grocery, crime and green-space data used by the
+comparison page, run `backend/scripts/setup_official_data.py` as described in
+[local data setup](local-data-setup.md). It wraps the manual steps below with checksum checks,
+a dry run on a temporary database copy, a backup, and a confirmation before any repair.
+
 ## Reproduce from the saved files
 
 After installing backend requirements and activating your own virtual environment:
@@ -51,7 +58,11 @@ possible from live APIs; preserve the original snapshots for exact reproduction.
 Check source terms before redistributing any raw download. Toronto catalogue
 metadata returned "License not specified" for the queried packages; this is stored
 explicitly rather than assigning an unverified licence. OSM uses ODbL attribution;
-CMHC workbooks carry CMHC copyright and their own terms.
+CMHC workbooks carry CMHC copyright and their own terms. The grocery, crime and
+green-space snapshots were reviewed on 2026-11-14 (ODbL 1.0, Open Government
+Licence – Ontario as published by the Toronto Police Service, and Open Government
+Licence – Toronto). Their attribution and conditions are in `data/official-sources.json`
+and [local data setup](local-data-setup.md#licence-review-checked-2026-11-14).
 
 ## What is stored
 
@@ -84,7 +95,23 @@ neighbourhood counts are inferred. TTC records retain `location_type` so station
 platforms and entrances must be distinguished before counting service stops.
 
 Park/green-space polygons remain polygons in source rows, without invented
-entrances or centroids. GTFS route/schedule files remain available in the raw feed
+entrances or centroids. From the current City Green Spaces snapshot, the normalizer
+derives two indicators for every 140 and 158 neighbourhood: `green-parks-within-1km`
+(distinct parks of class Park or Open Green Space within 1 km of the boundary) and
+`green-space-share` (the union of reviewed green-space classes as a percentage of the
+area; golf courses, building grounds and road fragments are excluded). Any unreviewed
+`AREA_CLASS` stops the build. These are current-snapshot measures, not historical values.
+
+**Places within 1 km** (`places-within-1km-library`, `-school`, `-grocery`, `-transit_stop`)
+count each place list inside every 140 and 158 neighbourhood or within 1 km of its boundary.
+Each is stored under its own place list's release. Groceries are OSM supermarkets and
+greengrocers, excluding convenience stores; transit counts every GTFS stop record.
+`area-within-1km-km2` (under each boundary release) is the size of that area, so the compare
+page can rank place densities rather than raw counts, which favour large neighbourhoods.
+
+**Toronto Police crime rates** (`tps-crime-*`) hold published counts and rates per
+100,000 for nine offence types, 2014–2025, on the 158 neighbourhoods. Population
+(the TPS estimate, not Census) is published only for 2025. GTFS route/schedule files remain available in the raw feed
 ZIP, but routing, travel-time calculation and schedule queries are not implemented.
 
 ## Known gaps and comparison limits
@@ -127,4 +154,6 @@ ZIP, but routing, travel-time calculation and schedule queries are not implement
 - [School locations](https://open.toronto.ca/dataset/school-locations-all-types/)
 - [Library branches](https://open.toronto.ca/dataset/library-branch-general-information/)
 - [Parks](https://open.toronto.ca/dataset/parks/)
+- [Green Spaces](https://open.toronto.ca/dataset/green-spaces/)
+- [Toronto Police neighbourhood crime rates](https://data.torontopolice.on.ca/datasets/TorontoPS::neighbourhood-crime-rates-open-data/about)
 - [OpenStreetMap attribution and licence](https://www.openstreetmap.org/copyright)
