@@ -79,6 +79,18 @@
     "retrieved_at": "2026-10-27T19:21:46.710135+00:00",
     "sha256": "4f9ac5e9f9feced002cca20b20a9c4a150355a9c7940e43002d60df41d917d83"
   },
+  "crime-rates.csv": {
+    "url": "https://services.arcgis.com/S9th0jAJ7bqgIRjw/ArcGIS/rest/services/Neighbourhood_Crime_Rates_Open_Data/FeatureServer/0/query?where=1%3D1&outFields=*&returnGeometry=false&f=csv",
+    "page": "https://data.torontopolice.on.ca/datasets/TorontoPS::neighbourhood-crime-rates-open-data/about",
+    "retrieved_at": "2026-11-14T01:46:55+00:00",
+    "sha256": "21f0b84fa7cc0390b5043d7971bbf65f4cfe13228870d2f06bf56784887488af",
+    "mirror": "https://github.com/CSC392-CSC492-Building-AI-ML-systems/MCP-Canada/releases/download/official-data-2026-11-14/crime-rates.csv",
+    "licence": "Open Government Licence – Ontario, as published by the Toronto Police Service (ArcGIS item ea0cfecdb1de416884e6b0bf08a9e195, \"Terms of Use\")",
+    "licence_url": "https://www.ontario.ca/page/open-government-licence-ontario",
+    "attribution": "Contains information licensed under the Open Government Licence – Ontario. Source: Toronto Police Service.",
+    "licence_conditions": "Redistribution allowed with attribution; no share-alike. TPS adds: reproduce accurately and do not misrepresent; do not link with other data to identify any person, business or organization; do not imply access to TPS records about identifiable people; no TPS names, crests or logos; no endorsement.",
+    "licence_checked": "2026-11-14: licenseInfo of the public ArcGIS item owned by TorontoPoliceService; tps.ca licence page blocked automated access, confirm it in a browser"
+  },
   "libraries.geojson": {
     "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/f5aa9b07-da35-45e6-b31f-d6790eb9bd9b/resource/5f4950b4-c727-4e54-8d0d-972e198268d6/download/tpl-branch-general-information-4326.geojson",
     "retrieved_at": "2026-10-27T19:28:28.610060+00:00",
@@ -86,8 +98,14 @@
   },
   "osm-groceries.json": {
     "url": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A45%5D%3Bnwr%5B%22shop%22~%22%5E%28supermarket%7Cconvenience%7Cgreengrocer%29%24%22%5D%2843.58%2C-79.65%2C43.86%2C-79.11%29%3Bout+center+tags%3B",
-    "retrieved_at": "2026-10-27T19:43:16.932399+00:00",
-    "sha256": "cc13f881303310e8d2e58d85fb8f90107992b24fc9cdec67fa47f6c910b1e7e4"
+    "retrieved_at": "2026-11-14T01:43:41+00:00",
+    "sha256": "189a307dfc101538621a2b71da5f38755a709a68e32eda735fe52ac75e1c30df",
+    "mirror": "https://github.com/CSC392-CSC492-Building-AI-ML-systems/MCP-Canada/releases/download/official-data-2026-11-14/osm-groceries.json",
+    "licence": "Open Database License (ODbL) 1.0",
+    "licence_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "attribution": "© OpenStreetMap contributors (https://www.openstreetmap.org/copyright)",
+    "licence_conditions": "Redistribution allowed under ODbL: keep the attribution and name/link the ODbL. Share-alike: a publicly used derivative database (e.g. the normalized bundle or database rows derived from this file) must be offered under ODbL; displayed results (the comparison table) are produced works needing attribution.",
+    "licence_checked": "2026-11-14: openstreetmap.org/copyright and OSMF attribution guidelines"
   },
   "parks.zip": {
     "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/2aac8903-23ff-4072-ab72-b76cac44ad89/resource/9f53c253-a47e-497f-8a07-528f7d7aad90/download/parks-wgs84.zip",
@@ -99,9 +117,20 @@
     "retrieved_at": "2026-10-27T19:34:20.553102+00:00",
     "sha256": "9354e4640e489deb357a432777683090c8cee65911616cb44922ecda8398a3a1"
   },
+  "toronto-green-spaces.geojson": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/9a284a84-b9ff-484b-9e30-82f22c1780b9/resource/7a26629c-b642-4093-b33c-a5a21e4f3d22/download/Green%20Spaces%20-%204326.geojson",
+    "retrieved_at": "2026-11-14T02:56:37+00:00",
+    "sha256": "375b4de6cbed0bf68e2a21be24b339426650a262d0c3ed2df552b3de37955e32",
+    "mirror": "https://github.com/CSC392-CSC492-Building-AI-ML-systems/MCP-Canada/releases/download/official-data-2026-11-14/toronto-green-spaces.geojson",
+    "licence": "Open Government Licence – Toronto 1.0 (linked from the open.toronto.ca dataset page; the CKAN record has no licence fields)",
+    "licence_url": "https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-licence/",
+    "attribution": "Contains information licensed under the Open Government Licence – Toronto.",
+    "licence_conditions": "Redistribution allowed with attribution and, where possible, a link to the licence; no share-alike. Excludes personal information, third-party rights the City cannot license, and City names, crests and logos.",
+    "licence_checked": "2026-11-14: open.toronto.ca/dataset/green-spaces and the City licence page; CKAN license fields are empty"
+  },
   "ttc-merged.zip": {
     "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/b811ead4-6eaf-4adb-8408-d389fb5a069c/resource/c920e221-7a1c-488b-8c5b-6d8cd4e85eaf/download/completegtfs.zip",
-    "retrieved_at": "2026-10-27T19:38:15.533311+00:00",
-    "sha256": "5e0191d59cb991b6c88ba9c1a5f2ca93a5a064a4d258dbc7ba93801d15f3dfca"
+    "retrieved_at": "2026-11-14T01:25:04+00:00",
+    "sha256": "a2c8d495bf7b06fe0687183d6d7e606e19555e43bf41a007d97d482e527b23a1"
   }
 }

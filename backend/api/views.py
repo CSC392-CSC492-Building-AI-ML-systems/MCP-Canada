@@ -1,3 +1,4 @@
+from django.db.models.fields.json import KT
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from .comparison_services import Budget
@@ -74,6 +75,76 @@ def observations(request):
             {**row, "value": str(row["value"]) if row["value"] is not None else None}
             for row in rows
         ],
+    })
+
+
+@require_GET
+def observations_batch(request):
+    """One indicator for every geography in a set, e.g. a Census row for all 158 neighbourhoods."""
+    filters = {
+        "geography__geography_set_id": request.GET.get("geography_set_id", "").strip(),
+        "indicator_id": request.GET.get("indicator_id", "").strip(),
+        "source_id": request.GET.get("source_id", "").strip(),
+    }
+    if not all(filters.values()):
+        return JsonResponse(
+            {"error": "Required query parameters: geography_set_id, indicator_id, source_id"},
+            status=400,
+        )
+    year = request.GET.get("reference_year", "").strip()
+    if year:
+        if not year.isdigit():
+            return JsonResponse({"error": "reference_year must be a year"}, status=400)
+        filters["reference_year"] = int(year)
+    rows = Observation.objects.filter(**filters).order_by(
+        "geography_id", "reference_year", "period", "id",
+    ).values(
+        "geography_id", "geography__name", "census_year", "reference_year",
+        "period", "value", "status", "source_locator",
+    )
+    return JsonResponse({
+        "observations": [
+            {
+                **{k: v for k, v in row.items() if k != "geography__name"},
+                "name": row["geography__name"],
+                "value": str(row["value"]) if row["value"] is not None else None,
+            }
+            for row in rows
+        ],
+    })
+
+
+@require_GET
+def places(request):
+    """Point locations of one amenity category (e.g. library) with their source.
+
+    Optional bbox=minLon,minLat,maxLon,maxLat limits the area. kind is the source's own
+    subtype where one exists (the OSM shop tag for groceries), otherwise null."""
+    category = request.GET.get("category", "").strip()
+    if not category:
+        return JsonResponse({"error": "Required query parameter: category"}, status=400)
+    places_in = Place.objects.filter(category=category)
+    if request.GET.get("bbox"):
+        try:
+            west, south, east, north = (float(x) for x in request.GET["bbox"].split(","))
+        except ValueError:
+            return JsonResponse({"error": "bbox must be minLon,minLat,maxLon,maxLat"}, status=400)
+        if not (-180 <= west <= east <= 180 and -90 <= south <= north <= 90):
+            return JsonResponse({"error": "bbox must be minLon,minLat,maxLon,maxLat"}, status=400)
+        places_in = places_in.filter(longitude__gte=west, longitude__lte=east,
+                                     latitude__gte=south, latitude__lte=north)
+    rows = places_in.order_by("name").values(
+        "name", "latitude", "longitude", "valid_on", "source_id", kind=KT("properties__tags__shop"),
+    )
+    return JsonResponse({
+        "places": [
+            {**row, "latitude": float(row["latitude"]), "longitude": float(row["longitude"]),
+             "valid_on": row["valid_on"].isoformat()}
+            for row in rows
+        ],
+        "sources": list(SourceRelease.objects.filter(
+            id__in={row["source_id"] for row in rows},
+        ).values("id", "publisher", "title", "url", "coverage")),
     })
 
 

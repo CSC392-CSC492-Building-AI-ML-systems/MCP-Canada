@@ -237,8 +237,19 @@ and invokes `health_check` without a database or running HTTP server.
 ## Imported public data
 
 The local database now includes reviewed Census/CMHC/CPI measurements, place
-locations and complete source-table staging. See [import instructions and coverage](docs/official-data-import.md)
-and [loaded data inventory](docs/data-import-status.md). To reproduce imports,
-use the pinned manifest and preparation script; local downloads and database files
-are ignored by Git. Run `backend/.venv/bin/python backend/manage.py data_inventory`
-to inspect the actual database.
+locations, Toronto Police crime rates, City green-space measures and complete
+source-table staging. Raw downloads and database files are ignored by Git. To
+prepare or update your local database, run this one command after `uv sync`
+(on Windows, use `backend\.venv\Scripts\python`):
+
+```sh
+backend/.venv/bin/python backend/scripts/setup_official_data.py
+```
+
+It fetches and checksum-verifies the pinned raw snapshots, then validates on a
+temporary copy before touching your database. It never deletes records, and it
+asks before any repair. See [local data setup](docs/local-data-setup.md) for
+prerequisites, fresh versus existing databases, and troubleshooting.
+[Import details and coverage](docs/official-data-import.md) and the
+[loaded data inventory](docs/data-import-status.md) describe the data. Run
+`backend/.venv/bin/python backend/manage.py data_inventory` to inspect the actual database.

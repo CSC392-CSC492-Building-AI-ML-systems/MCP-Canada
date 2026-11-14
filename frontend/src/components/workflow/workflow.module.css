@@ -37,6 +37,7 @@
 .compareTable thead th:first-child { width: 220px; }
 .compareTable th a { color: #1a1f1a; text-decoration: none; }
 .compareTable th small { display: block; font-size: 10px; font-weight: 400; color: #646659; margin-top: 8px; }
+.compareTable tbody th small,.compareTable td small { display: block; font-size: 10px; font-weight: 400; color: #646659; margin-top: 2px; }
 .compareTable tbody tr:nth-child(even) { background: #f3f2e9; }
 .compareTable td.best { color: #295738; background: #e6ecdd; font-weight: 700; }
 .evidenceCard { padding: 18px; border: 1px solid #d6cfba; border-radius: 10px; background: #fbfbf9; margin: 20px 0; }
