@@ -51,3 +51,42 @@ it("requires exactly one reviewed 2021 release before making requests", async ()
   })).rejects.toThrow("A unique reviewed 2021 Census release is required.");
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("keeps only unique annual 2021 observations in the fallback path", async () => {
+  const secondPlace = { ...catalog.geographies[0], id: "toronto-158-3", name: "Second place", code: "3" };
+  const fetcher = vi.fn()
+    .mockResolvedValueOnce(new Response("", { status: 404 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ observations: [
+      { census_year: 2021, period: "annual", value: "1200", status: "observed", source_locator: "annual" },
+      { census_year: 2021, period: "monthly", value: "100", status: "observed", source_locator: "monthly" },
+      { census_year: 2016, period: "annual", value: "900", status: "observed", source_locator: "older" },
+    ] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ observations: [
+      { census_year: 2021, period: "annual", value: "1300", status: "observed", source_locator: "duplicate-a" },
+      { census_year: 2021, period: "annual", value: "1400", status: "observed", source_locator: "duplicate-b" },
+    ] })));
+  vi.stubGlobal("fetch", fetcher);
+
+  const rows = await loadCostRows({
+    ...catalog,
+    geographies: [...catalog.geographies, secondPlace],
+  });
+
+  expect(rows).toEqual([{
+    geography_id: "toronto-158-2",
+    name: "Test place",
+    census_year: 2021,
+    period: "annual",
+    value: "1200",
+    status: "observed",
+    source_locator: "annual",
+  }]);
+});
+
+it("reports a fallback request failure instead of returning partial recommendations", async () => {
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce(new Response("", { status: 404 }))
+    .mockResolvedValueOnce(new Response("", { status: 503 })));
+
+  await expect(loadCostRows(catalog)).rejects.toThrow("Could not load housing benchmarks.");
+});
