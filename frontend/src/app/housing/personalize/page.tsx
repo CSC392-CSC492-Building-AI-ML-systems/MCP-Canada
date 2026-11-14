@@ -27,7 +27,7 @@ export default function PersonalizePage() {
             <h2 id="personalize-heading">Personalize my search</h2>
             <p>Tell us what you’d look for in a neighbourhood.</p>
             <ul className={styles.checklist}>
-              <li>Budget &amp; bedrooms</li>
+              <li>Budget</li>
               <li>Work or school commute</li>
               <li>Everyday needs &amp; lifestyle</li>
               <li>Your priorities &amp; history interests</li>

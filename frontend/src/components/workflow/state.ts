@@ -1,8 +1,8 @@
 import type { ExplorerPlace } from "../explorer/PlacesSidebar";
 export type SearchProfile = {
-  version: 1; income: string; rent: string; bedrooms: string; mode: string;
+  version: 1; income: string; rent: string; mode: string;
   work: string; school: string; trip: number; priorities: number[]; weights: number[];
-  interests: string[]; notes: string;
+  interests: string[]; notes: string; bedrooms?: string;
 };
 export const PROFILE_KEY = "mcp-canada-profile-v1";
 export const SAVED_KEY = "mcp-canada-saved-housing";
@@ -10,7 +10,8 @@ export const RECOMMENDED_KEY = "mcp-canada-recommended-v1";
 export function parseProfile(raw: string | null): SearchProfile | null {
   try {
     const p = JSON.parse(raw ?? "null");
-    if (!p || p.version !== 1 || !["income", "rent", "bedrooms", "mode", "work", "school", "notes"].every(k => typeof p[k] === "string")) return null;
+    if (!p || p.version !== 1 || !["income", "rent", "mode", "work", "school", "notes"].every(k => typeof p[k] === "string")) return null;
+    if (p.bedrooms !== undefined && typeof p.bedrooms !== "string") return null;
     if (!Number.isFinite(Number(p.rent)) || Number(p.rent) <= 0 || (p.income.trim() && (!Number.isFinite(Number(p.income)) || Number(p.income) <= 0))) return null;
     if (!Number.isFinite(p.trip) || p.trip < 0 || p.trip > 120 || !Array.isArray(p.priorities) || p.priorities.length > 3 || !p.priorities.every((n: unknown) => Number.isInteger(n) && Number(n) >= 0 && Number(n) < 8)) return null;
     if (!Array.isArray(p.weights) || p.weights.length !== 6 || !p.weights.every((n: unknown) => Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 5) || !Array.isArray(p.interests) || !p.interests.every((s: unknown) => typeof s === "string")) return null;
