@@ -5,9 +5,10 @@ import { explainEvidence } from "./Teacher";
 const profile: SearchProfile = { version: 1, income: "72000", rent: "1500", mode: "Transit", work: "", school: "", trip: 30, priorities: [1], weights: [5, 4, 5, 3, 4, 4], interests: [], notes: "private note" };
 it("validates stored profiles instead of accepting incomplete or corrupt session data", () => {
   expect(parseProfile(JSON.stringify(profile))).toEqual(profile);
-  expect(parseProfile(JSON.stringify({ ...profile, bedrooms: "2" }))).toEqual({ ...profile, bedrooms: "2" });
+  expect(parseProfile(JSON.stringify({ ...profile, work: "Downtown Toronto", school: "Bloor West", notes: "Ready to move in" }))).toEqual({ ...profile, work: "Downtown Toronto", school: "Bloor West", notes: "Ready to move in" });
   expect(parseProfile('{')).toBeNull();
   expect(parseProfile(JSON.stringify({ ...profile, income: "NaN" }))).toBeNull();
+  expect(parseProfile(JSON.stringify({ ...profile, trip: 200 }))).toBeNull();
   expect(parseProfile(JSON.stringify({ ...profile, weights: [99] }))).toBeNull();
 });
 it("filters missing costs, respects budget, and does not invent fit scores", () => {
