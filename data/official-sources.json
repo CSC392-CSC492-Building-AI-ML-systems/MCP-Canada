@@ -101,11 +101,15 @@
     "retrieved_at": "2026-11-14T01:43:41+00:00",
     "sha256": "189a307dfc101538621a2b71da5f38755a709a68e32eda735fe52ac75e1c30df",
     "mirror": "https://github.com/CSC392-CSC492-Building-AI-ML-systems/MCP-Canada/releases/download/official-data-2026-11-14/osm-groceries.json",
+    "live": true,
+    "note": "Live Overpass query: every answer contains the current OSM database timestamp, so the bytes differ on each request. The sha256 and retrieved_at here pin the 2026-11-14 snapshot stored at the release mirror (used by setup_official_data.py). For a local copy, prepare_official_data.py --download saves the newest answer in data/raw/ and records its sha256 and retrieved_at in data/raw/osm-groceries.json.meta.json, which override the pinned values; later runs reuse that copy, and --refresh osm-groceries.json replaces it. Overpass is often busy (HTTP 502/504): the script retries, and if it still fails, just run --download again. The app never downloads at runtime.",
     "licence": "Open Database License (ODbL) 1.0",
     "licence_url": "https://opendatacommons.org/licenses/odbl/1-0/",
     "attribution": "© OpenStreetMap contributors (https://www.openstreetmap.org/copyright)",
     "licence_conditions": "Redistribution allowed under ODbL: keep the attribution and name/link the ODbL. Share-alike: a publicly used derivative database (e.g. the normalized bundle or database rows derived from this file) must be offered under ODbL; displayed results (the comparison table) are produced works needing attribution.",
     "licence_checked": "2026-11-14: openstreetmap.org/copyright and OSMF attribution guidelines"
+    "live": true,
+    "note": "Live Overpass query: every answer contains the current OSM database timestamp, so the bytes differ on each request and no sha256 is pinned here. --download saves the newest copy in data/raw/ and records its sha256 and retrieved_at in data/raw/osm-groceries.json.meta.json; later runs reuse that copy, and --refresh osm-groceries.json replaces it. Overpass is often busy (HTTP 502/504): the script retries, and if it still fails, just run --download again. The app never downloads at runtime."
   },
   "parks.zip": {
     "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/2aac8903-23ff-4072-ab72-b76cac44ad89/resource/9f53c253-a47e-497f-8a07-528f7d7aad90/download/parks-wgs84.zip",
@@ -130,7 +134,7 @@
   },
   "ttc-merged.zip": {
     "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/b811ead4-6eaf-4adb-8408-d389fb5a069c/resource/c920e221-7a1c-488b-8c5b-6d8cd4e85eaf/download/completegtfs.zip",
-    "retrieved_at": "2026-11-14T01:25:04+00:00",
+    "retrieved_at": "2026-11-12T04:22:54.206239+00:00",
     "sha256": "a2c8d495bf7b06fe0687183d6d7e606e19555e43bf41a007d97d482e527b23a1"
   }
 }
