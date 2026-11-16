@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import boundaries, catalog, comparison, health, observations, observations_batch, places
+from .views import boundaries, catalog, comparison, health, mcp_canada_cpi, observations, observations_batch, places
 
 
 urlpatterns = [
