@@ -193,26 +193,41 @@ class TeacherTools:
 
     def _find_app(self, query, per_kind=10):
         from django.db.models import Q
-        from .models import Geography, Indicator, SourceRelease
+        from .models import Geography, Indicator, Observation, SourceRelease
 
-        words = [w for w in query.replace(",", " ").split() if len(w) > 2][:6]
+        words = [w.lower() for w in query.replace(",", " ").split() if len(w) > 2][:6]
         if not words:
             return _clip({"error": "Give a few words to search for."})
 
-        def matching(model, fields):
+        def best(model, fields, values):
+            """Rows matching any word, best first: the most words matched across the fields."""
             q = Q()
             for word in words:
                 for field in fields:
                     q |= Q(**{f"{field}__icontains": word})
-            return model.objects.filter(q)
+            rows = list(model.objects.filter(q).values(*values)[:2000])
 
+            def score(row):
+                text = " ".join(str(row.get(field, "")) for field in fields).lower()
+                return sum(word in text for word in words)
+
+            rows.sort(key=score, reverse=True)
+            return rows[:per_kind]
+
+        indicators = best(Indicator, ["label", "id"], ["id", "label", "unit"])
+        for indicator in indicators:
+            # Which source and boundary set this indicator has values in, so the agent
+            # passes a matching trio to get_app_observations (2001 uses the 140 model).
+            indicator["available_in"] = [
+                {"source_id": source, "geography_set_id": geography_set}
+                for source, geography_set in Observation.objects
+                .filter(indicator_id=indicator["id"])
+                .values_list("source_id", "geography__geography_set_id").distinct()[:5]
+            ]
         return _clip({
-            "sources": list(matching(SourceRelease, ["title", "coverage"])
-                            .values("id", "title", "publisher")[:per_kind]),
-            "indicators": list(matching(Indicator, ["label", "id"])
-                               .values("id", "label", "unit")[:per_kind]),
-            "geographies": list(matching(Geography, ["name", "code"])
-                                .values("id", "name", "geography_set_id")[:per_kind]),
+            "indicators": indicators,
+            "geographies": best(Geography, ["name", "code"], ["id", "name", "geography_set_id"]),
+            "sources": best(SourceRelease, ["title", "coverage"], ["id", "title", "publisher"]),
         })
 
     def _app_observations(self, geography_id, indicator_id, source_id):
