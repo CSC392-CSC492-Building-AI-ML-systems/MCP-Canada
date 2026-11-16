@@ -131,8 +131,8 @@ class MCPCanadaClient:
                 f"{type(cause).__name__}: {cause}. Check the server's own error above."
             ) from exc
 
-    def call(self, tool: str, arguments: dict | None = None, timeout: float | None = None) -> dict:
-        """Run one MCP-Canada data tool, such as boc_get_observations."""
+    def _run(self, name: str, arguments: dict, timeout: float | None, label: str):
+        """Call one tool on the server itself and return the raw CallToolResult."""
         timeout = timeout or default_timeout()
         with self._lock:
             self._ensure_loop()
@@ -141,19 +141,39 @@ class MCPCanadaClient:
             session = self._session
         if session is None:
             raise MCPCanadaError("MCP-Canada connection closed")
-        future = asyncio.run_coroutine_threadsafe(
-            session.call_tool(GATEWAY_TOOL, {"name": tool, "arguments": arguments or {}}),
-            self._loop,
-        )
+        future = asyncio.run_coroutine_threadsafe(session.call_tool(name, arguments), self._loop)
         try:
-            result = future.result(timeout)
+            return future.result(timeout)
         except TimeoutError as exc:
             future.cancel()
-            raise MCPCanadaError(f"{tool} timed out after {timeout:g}s") from exc
+            raise MCPCanadaError(f"{label} timed out after {timeout:g}s") from exc
         except Exception as exc:
             cause = root_cause(exc)
-            raise MCPCanadaError(f"{tool} failed: {type(cause).__name__}: {cause}") from exc
+            raise MCPCanadaError(f"{label} failed: {type(cause).__name__}: {cause}") from exc
+
+    def call(self, tool: str, arguments: dict | None = None, timeout: float | None = None) -> dict:
+        """Run one MCP-Canada data tool, such as boc_get_observations, through the gateway."""
+        result = self._run(GATEWAY_TOOL, {"name": tool, "arguments": arguments or {}}, timeout, tool)
         return parse_result(result)
+
+    def call_server_tool(self, name: str, arguments: dict | None = None, timeout: float | None = None):
+        """Run one of the server's own tools, such as discover_tools or list_modules.
+
+        Unlike call(), the result can be a list (discover_tools returns one).
+        """
+        result = self._run(name, arguments or {}, timeout, name)
+        text = "\n".join(getattr(c, "text", "") for c in result.content).strip()
+        if result.isError:
+            raise MCPCanadaError(text or f"{name} returned an error")
+        payload = result.structuredContent
+        if payload is None:
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise MCPCanadaError(f"{name} returned non-JSON output: {text[:200]}") from exc
+        if isinstance(payload, dict) and set(payload) == {"result"}:
+            payload = payload["result"]
+        return payload
 
     def close(self):
         if self._loop is not None and self._closed is not None:
