@@ -1,5 +1,7 @@
 /** Frontend adapter over the existing catalog and observations APIs.
  * No writes, new endpoints, inferred boundary joins, or source substitutions.
+ * The one cross-set link is exact: the comparison table uses a neighbourhood with
+ * the same code and name in both sets (boundaries unchanged in 2021).
  */
 import type { BoundarySet, Measurement, NeighbourhoodProfile } from './types';
 type Source = NonNullable<Measurement['source']>;
@@ -34,6 +36,39 @@ export async function loadWorkspaceData(signal?: AbortSignal) {
   }
   return {catalog,boundary_sets};
 }
+const setForYear = (year: number) => year === 2021 ? 'toronto-158' : 'toronto-140';
+
+/** Census years that can be compared, across both Toronto boundary sets. */
+export function comparisonYears(sets: BoundarySet[]) {
+  return [...new Set(sets.filter(s => s.id === 'toronto-140' || s.id === 'toronto-158').flatMap(s => s.years))].sort((a, b) => a - b);
+}
+
+/** Same code and same name in both sets: one of the 124 neighbourhoods the City left unchanged in 2021. */
+function unchangedCounterpart(catalog: Catalog, geography: Catalog['geographies'][number], setId: string) {
+  return catalog.geographies.find(g => g.geography_set_id === setId && g.code === geography.code
+    && g.name.trim().toLowerCase() === geography.name.trim().toLowerCase());
+}
+
+/** Profile for the comparison table. For a year published on the other boundary set,
+ * an unchanged neighbourhood uses its exact counterpart; a split neighbourhood shows unavailable values. */
+export async function loadComparisonProfile(catalog: Catalog, geographyId: string, year: number, signal?: AbortSignal): Promise<NeighbourhoodProfile> {
+  const geography = catalog.geographies.find(g => g.id === geographyId);
+  if (!geography) throw new Error('Choose a valid neighbourhood and Census year.');
+  const target = setForYear(year);
+  if (geography.geography_set_id === target) return loadProfile(catalog, geographyId, year, signal);
+  const own = {id: geography.id, name: geography.name, code: geography.code, boundary_set: geography.geography_set_id, boundary_version: geography.geography_set__version};
+  const counterpart = unchangedCounterpart(catalog, geography, target);
+  if (counterpart) {
+    const profile = await loadProfile(catalog, counterpart.id, year, signal);
+    return {...profile, geography: own, data_geography: {id: counterpart.id, name: counterpart.name, boundary_set: target}};
+  }
+  const missing: Measurement = {value: null, status: 'missing', source: null,
+    reason: `This neighbourhood's boundaries changed in 2021, so no ${year} Census value exists for this exact area.`};
+  return {geography: own, year, available_years: [], metrics: {cost: missing, income: missing, burden: missing}, history: [],
+    method: {release_selection: '', housing: '', income: '', inflation: '',
+      comparison: 'Only neighbourhoods with unchanged boundaries are compared across boundary sets.'}};
+}
+
 export async function loadProfile(catalog: Catalog, geographyId: string, year: number, signal?: AbortSignal): Promise<NeighbourhoodProfile> {
   const geography=catalog.geographies.find(g=>g.id===geographyId);
   if (!geography || !(year in rows)) throw new Error('Choose a valid neighbourhood and Census year.');
