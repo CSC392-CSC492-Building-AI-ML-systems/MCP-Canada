@@ -15,9 +15,6 @@ import zipfile
 
 import openpyxl
 import shapefile
-from shapely import STRtree, make_valid, unary_union
-from shapely.geometry import Point, shape
-from shapely.ops import transform
 
 ROOT = Path(__file__).resolve().parents[2]
 USER_AGENT = 'MCP-Canada-student-project/0.1'
@@ -60,11 +57,7 @@ def load_live_meta(raw_dir, name, item):
         return
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-    if meta.get('sha256') != digest and digest == item.get('sha256'):
-        # The pinned snapshot (e.g. from the release mirror): keep its pinned retrieved_at.
-        meta = dict(sha256=digest, retrieved_at=item['retrieved_at'])
-        save_live_meta(raw_dir, name, meta)
-    elif meta.get('sha256') != digest:
+    if meta.get('sha256') != digest:
         # No (matching) record of this copy: date it by the file's modification time.
         modified = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
         meta = dict(sha256=digest, retrieved_at=modified)
@@ -93,127 +86,6 @@ def number(raw):
 
 def name_key(name):
     return re.sub('[^a-z0-9]', '', re.sub(r'\s*\(\d+\)$', '', name).lower())
-
-
-CRIME_OFFENCES = {
-    'ASSAULT': 'Assault', 'AUTOTHEFT': 'Auto theft', 'BIKETHEFT': 'Bicycle theft',
-    'BREAKENTER': 'Break and enter', 'HOMICIDE': 'Homicide', 'ROBBERY': 'Robbery',
-    'SHOOTING': 'Shootings and firearm discharges', 'THEFTFROMMV': 'Theft from motor vehicle',
-    'THEFTOVER': 'Theft over $5,000',
-}
-
-
-def crime_cells(rows, boundary_names):
-    """Checked (code, measure, year, raw, column) cells from the TPS neighbourhood crime-rates CSV.
-
-    measure is an offence key, '<offence>_RATE', or 'POPULATION'. Columns are matched exactly;
-    an unexpected column, a missing neighbourhood or a renamed one stops the import."""
-    if not rows:
-        raise ValueError('Empty crime-rates file')
-    fixed = {'OBJECTID_1', 'NEIGHBOURHOOD_NAME', 'HOOD_158', 'Shape__Area', 'Shape__Length'}
-    measures = {*CRIME_OFFENCES, *(f'{k}_RATE' for k in CRIME_OFFENCES), 'POPULATION'}
-    columns = []
-    for column in rows[0]:
-        if column in fixed:
-            continue
-        match = re.fullmatch(r'([A-Z]+(?:_RATE)?)_(\d{4})', column)
-        if not match or match[1] not in measures:
-            raise ValueError(f'Unexpected crime-rates column: {column!r}')
-        columns.append((column, match[1], int(match[2])))
-    if {m for _, m, _ in columns} != measures:
-        raise ValueError('Crime-rates file is missing an offence, rate or population series')
-    codes = [str(int(row['HOOD_158'])) for row in rows]
-    if len(set(codes)) != len(codes):
-        raise ValueError('Duplicate HOOD_158 in crime-rates file')
-    if set(codes) != set(boundary_names):
-        raise ValueError('Crime-rates neighbourhoods do not match the 158 boundary model')
-    cells = []
-    for code, row in zip(codes, rows):
-        if name_key(row['NEIGHBOURHOOD_NAME']) != name_key(boundary_names[code]):
-            raise ValueError(f'Crime-rates name differs from boundary {code}: {row["NEIGHBOURHOOD_NAME"]!r}')
-        cells.extend((code, measure, year, row[column], column) for column, measure, year in columns)
-    return cells
-
-
-# City Green Spaces AREA_CLASS review. Every class must be listed; a new class stops the build.
-GREEN_PARK_CLASSES = {'Park', 'Open Green Space'}
-GREEN_SHARE_CLASSES = GREEN_PARK_CLASSES | {
-    'OTHER_CITY', 'OTHER_HYDRO', 'OTHER_TRCA', 'OTHER_PROVINCIAL_FEDERAL', 'OTHER_CEMETERY',
-    'Cemetery', 'Civic Centre Square', 'Hydro Field/Utility Corridor'}
-GREEN_EXCLUDED_CLASSES = {  # road fragments, private-use or restricted grounds
-    'Traffic Island', 'Cul de Sac', 'Boulevard', 'OTHER_ROAD', 'Orphaned Space', 'OTHER_UNKNOWN',
-    'OTHER_GOLFCOURSE', 'Golf Course', 'Building Grounds'}
-_KM_X = 111.32 * 0.7230  # km per degree longitude at 43.7°N (Toronto); <0.5% error across the city
-_KM_Y = 110.574
-
-
-def _km(geometry):
-    return transform(lambda x, y, z=None: (x * _KM_X, y * _KM_Y), geometry)
-
-
-def green_space_measures(features, boundaries, buffer_km=1.0):
-    """{geography_id: (parks within buffer_km, green-space % of area)} from Green Spaces GeoJSON features.
-
-    Parks are counted once per AREA_ID (a park split into several polygons is one park) when any
-    part comes within buffer_km of the boundary. The share is the union of green-space classes
-    inside the boundary, so overlapping polygons are not counted twice."""
-    parks, share = {}, []
-    for f in features:
-        cls = f['properties']['AREA_CLASS']
-        if cls not in GREEN_SHARE_CLASSES | GREEN_EXCLUDED_CLASSES:
-            raise ValueError(f'Unreviewed green-space class: {cls!r}')
-        if not f.get('geometry'):
-            raise ValueError(f'Green space without geometry: {f["properties"].get("AREA_ID")}')
-        geometry = _km(make_valid(shape(f['geometry'])))
-        if cls in GREEN_PARK_CLASSES:
-            parks.setdefault(f['properties']['AREA_ID'], []).append(geometry)
-        if cls in GREEN_SHARE_CLASSES:
-            share.append(geometry)
-    park_ids = list(parks)
-    park_shapes = [unary_union(parks[i]) for i in park_ids]
-    tree = STRtree(park_shapes)
-    green = unary_union(share)
-    result = {}
-    for gid, geometry in boundaries.items():
-        area = _km(make_valid(shape(geometry)))
-        if area.area <= 0:
-            raise ValueError(f'Empty boundary area: {gid}')
-        near = tree.query(area.buffer(buffer_km), predicate='intersects')
-        result[gid] = (len(near), green.intersection(area).area / area.area * 100)
-    return result
-
-
-# Place lists counted per neighbourhood; groceries exclude convenience stores (OSM shop tag).
-# category -> (label, OSM tag that selects the counted kinds or None, counted kinds or None = all)
-NEARBY_CATEGORIES = {
-    'library': ('Library branches', None, None),
-    'school': ('Schools (all types)', None, None),
-    'grocery': ('Supermarkets and greengrocers', 'shop', {'supermarket', 'greengrocer'}),
-    'transit_stop': ('TTC stops (each GTFS stop record: platform, direction, station or entrance)', None, None),
-    # Sit-down dining and nightlife; fast food is stored but not counted.
-    'dining': ('Restaurants, cafes, bars, pubs and nightclubs', 'amenity',
-               {'restaurant', 'cafe', 'bar', 'pub', 'nightclub', 'biergarten'}),
-    'errand_service': ('Pharmacies, banks and post offices', 'amenity', {'pharmacy', 'bank', 'post_office'}),
-    'childcare': ('Licensed child care centres', None, None),
-    'cultural_space': ('Cultural spaces (City of Toronto 2019 inventory)', None, None),
-}
-# OSM amenity -> stored place category (osm-amenities.json).
-OSM_AMENITY_CATEGORIES = {**dict.fromkeys(['restaurant', 'cafe', 'bar', 'pub', 'nightclub', 'biergarten', 'fast_food'], 'dining'),
-                          **dict.fromkeys(['pharmacy', 'bank', 'post_office'], 'errand_service')}
-CULTURAL_SPACE_TYPES = {'PERFRMANCE': 'performance', 'EXHBVISART': 'exhibition_visual_arts', 'SCRN_BASSE': 'screen_based',
-                        'LIBRARY': 'library', 'MULTIPURP': 'multipurpose', 'HERITAGE': 'heritage'}
-
-
-def places_within_km(points, boundaries, buffer_km=1.0):
-    """{geography_id: number of (lon, lat) points inside the boundary or within buffer_km of it}."""
-    tree = STRtree([_km(Point(lon, lat)) for lon, lat in points])
-    return {gid: len(tree.query(_km(make_valid(shape(g))).buffer(buffer_km), predicate='intersects'))
-            for gid, g in boundaries.items()}
-
-
-def area_within_km(boundaries, buffer_km=1.0):
-    """{geography_id: km² of the boundary grown by buffer_km}: the area place counts are taken from."""
-    return {gid: _km(make_valid(shape(g))).buffer(buffer_km).area for gid, g in boundaries.items()}
 
 
 def build(raw_dir, manifest, census_only=False):
@@ -249,7 +121,7 @@ def build(raw_dir, manifest, census_only=False):
         sid=source(filename,'City of Toronto',f'Toronto social planning neighbourhoods – {count}',f'{count} neighbourhood boundary model')
         gset=f'toronto-{count}'
         geo_set(gset,'neighbourhood',f'{count} boundary model; downloaded source snapshot',sid,count)
-        features=json.loads((raw_dir/filename).read_text(encoding='utf-8'))['features']
+        features=json.loads((raw_dir/filename).read_text())['features']
         if len(features)!=count:raise ValueError('Unexpected boundary count')
         for f in features:
             p=f['properties'];code=str(int(p['AREA_SHORT_CODE']));gid=f'{gset}-{code}'
@@ -284,8 +156,7 @@ def build(raw_dir, manifest, census_only=False):
                (301,'households',2021),(302,'households',2021),(361,'households',2021),(363,'households',2021),
                (368,'households',2021),(370,'percent',2021),(372,'CAD/month',2021),(373,'CAD/month',2021),
                (376,'households',2021),(378,'percent',2021),(380,'CAD/month',2021),(381,'CAD/month',2021),
-               *[(i,'dwellings',2021) for i in range(217,226)],  # occupied dwellings by structural type
-               (1486,'persons',2021),(1487,'persons',2021),(1488,'persons',2021),(1642,'persons',2021),(1643,'persons',2021)]}
+               (1487,'persons',2021),(1488,'persons',2021),(1643,'persons',2021)]}
     for year in [2001,2006,2011,2016,2021]:
         filename=f'census-{year}.'+('xlsx' if year==2021 else 'csv')
         sid=source(filename,'City of Toronto / Statistics Canada',f'{year} neighbourhood full Census profile',
@@ -331,7 +202,7 @@ def build(raw_dir, manifest, census_only=False):
     geo_set('canada-cpi','country','National coverage of V41690973',sid)
     out['geographies'].append(dict(id='canada-cpi',geography_set_id='canada-cpi',code='CA',name='Canada'))
     iid='canada-cpi-v41690973'
-    cpi=json.loads((raw_dir/'cpi.json').read_text(encoding='utf-8'))
+    cpi=json.loads((raw_dir/'cpi.json').read_text())
     staged(sid,'seriesDetail','CPI series metadata',cpi['seriesDetail'])
     indicator(iid,'Canada all-items CPI, not seasonally adjusted','index, 2002=100',cpi['seriesDetail']['V41690973']['description'],
         'Canadian consumers; national all-items basket','index',dict(series='V41690973',base='2002=100',frequency='monthly',seasonally_adjusted=False))
@@ -417,61 +288,11 @@ def build(raw_dir, manifest, census_only=False):
                     quality=row[col+1] if col+1<len(row) and str(row[col+1]) in ['a','b','c','d'] else ''
                     observe(sid,gid,iid,yr,f'{yr}-10',row[col],f'{table}!row={n};column={col+1}',
                         notes=f'CMHC published geography; source reliability code: {quality}; no neighbourhood allocation')
-    # TPS reported crime per 158-model neighbourhood; published counts, rates and TPS population estimates.
-    if (raw_dir/'crime-rates.csv').exists():
-        sid=source('crime-rates.csv','Toronto Police Service','Neighbourhood Crime Rates Open Data',
-            'Reported crime by Toronto 158-model neighbourhood, 2014 onward; excludes incidents without a verified location',
-            notes='Rates are per 100,000 using TPS population estimates, which are not Census counts')
-        with (raw_dir/'crime-rates.csv').open(encoding='utf-8-sig',newline='') as f:
-            rows=list(csv.DictReader(f))
-        for n,row in enumerate(rows,2):
-            staged(sid,f'csv/{n}',row['NEIGHBOURHOOD_NAME'],row)
-        names={g['code']:g['name'] for g in out['geographies'] if g['geography_set_id']=='toronto-158'}
-        for key,label in CRIME_OFFENCES.items():
-            indicator(f'tps-crime-{key.lower()}-count',f'{label} – reported incidents','incidents',
-                f'{label} occurrences reported to Toronto Police Service in the calendar year','Reported incidents located in the neighbourhood','count',
-                dict(offence=key,measure='count',publisher='TPS'))
-            indicator(f'tps-crime-{key.lower()}-rate',f'{label} – rate per 100,000 population','incidents per 100,000 people',
-                f'{label} occurrences per 100,000 residents, as published by Toronto Police Service','Reported incidents; TPS population estimate as denominator','rate',
-                dict(offence=key,measure='rate',denominator='TPS population estimate',publisher='TPS'))
-        indicator('tps-crime-population','TPS neighbourhood population estimate','persons',
-            'Population estimate Toronto Police Service uses as the crime-rate denominator','Residents of the neighbourhood','count',
-            dict(measure='population',publisher='TPS',note='not a Census count'))
-        row_of={str(int(row['HOOD_158'])):n for n,row in enumerate(rows,2)}
-        for code,measure,year,raw,column in crime_cells(rows,names):
-            iid='tps-crime-population' if measure=='POPULATION' else f'tps-crime-{measure.lower().replace("_rate","")}-{"rate" if measure.endswith("_RATE") else "count"}'
-            if measure.endswith('_RATE'):
-                parsed, status = number(raw)
-                if status == 'observed':
-                    raw = str(Decimal(parsed).quantize(Decimal('0.00000001')))
-            observe(sid,f'toronto-158-{code}',iid,year,'annual',raw,f'csv!row={row_of[code]};column={column}')
-    # Current City green spaces, measured on both neighbourhood boundary models.
-    if (raw_dir/'toronto-green-spaces.geojson').exists():
-        filename='toronto-green-spaces.geojson'
-        sid=source(filename,'City of Toronto','Green Spaces',
-            'City-maintained and other public green-space polygons; current snapshot, not historical green space',
-            notes='Neighbourhood measures are derived here from the source polygons; see indicator definitions')
-        date=manifest[filename]['retrieved_at'][:10]
-        features=json.loads((raw_dir/filename).read_text(encoding='utf-8'))['features']
-        for f in features:
-            p=f['properties']
-            staged(sid,f'feature/{p["_id"]}',p.get('AREA_NAME',''),dict(properties=p,geometry=f['geometry']))
-        indicator('green-parks-within-1km','City parks within 1 km','parks',
-            'Distinct parks (AREA_ID) of class Park or Open Green Space with any part inside the neighbourhood or within 1 km of its boundary',
-            'City of Toronto Green Spaces snapshot','count',dict(classes=sorted(GREEN_PARK_CLASSES),buffer_km=1,snapshot=date))
-        indicator('green-space-share','Green space share of neighbourhood area','percent',
-            'Area of the neighbourhood covered by green space (parks, ravines, hydro corridors, cemeteries, other public green space), as a percentage of the neighbourhood area; road fragments, golf courses and building grounds excluded',
-            'City of Toronto Green Spaces snapshot','percentage',dict(classes=sorted(GREEN_SHARE_CLASSES),excluded=sorted(GREEN_EXCLUDED_CLASSES),snapshot=date))
-        boundaries={g['id']:g['geometry'] for g in out['geographies'] if g['geography_set_id'] in ('toronto-140','toronto-158')}
-        for gid,(count,pct) in green_space_measures(features,boundaries).items():
-            note='Derived from source polygons on a local km projection; current snapshot applied to this boundary model'
-            observe(sid,gid,'green-parks-within-1km',int(date[:4]),date,str(count),f'derived:{gid};classes=park',notes=note)
-            observe(sid,gid,'green-space-share',int(date[:4]),date,str(Decimal(pct).quantize(Decimal('0.0001'))),f'derived:{gid};classes=share',notes=note)
     # Library feature geometries and original attributes.
     if (raw_dir/'libraries.geojson').exists():
         sid=source('libraries.geojson','Toronto Public Library / City of Toronto','Library branch general information','Toronto library branches; source snapshot, not historical amenity presence')
         date=manifest['libraries.geojson']['retrieved_at'][:10]
-        for f in json.loads((raw_dir/'libraries.geojson').read_text(encoding='utf-8'))['features']:
+        for f in json.loads((raw_dir/'libraries.geojson').read_text())['features']:
             p=f['properties'];g=f['geometry'];code=str(p['BranchCode'])
             staged(sid,f'feature/{code}',p['BranchName'],dict(properties=p,geometry=g))
             if not p.get('PhysicalBranch'):continue
@@ -520,7 +341,7 @@ def build(raw_dir, manifest, census_only=False):
     for path in ([] if any(x['category']=='transit_stop' for x in out['places']) else sorted(raw_dir.glob('ttc-stops-*.geojson'))):
         sid=source(path.name,'City of Toronto / Toronto Transit Commission','TTC stop GIS layer snapshot page',
             'Native TTC stop coverage, including any stops outside Toronto; no historical service claim')
-        for f in json.loads(path.read_text(encoding='utf-8'))['features']:
+        for f in json.loads(path.read_text())['features']:
             p=f['properties'];g=f['geometry']
             staged(sid,f'feature/{f.get("id",p.get("OBJECTID"))}',p.get('STOP_NAME',''),dict(properties=p,geometry=g))
             if g is None:continue
@@ -535,7 +356,7 @@ def build(raw_dir, manifest, census_only=False):
         sid=source('osm-groceries.json','OpenStreetMap contributors','Grocery-related shops from OpenStreetMap',
             'Bounding box 43.58,-79.65 to 43.86,-79.11; includes adjacent municipalities; not neighbourhood counts',
             'Open Database Licence 1.0; © OpenStreetMap contributors; https://www.openstreetmap.org/copyright')
-        osm=json.loads((raw_dir/'osm-groceries.json').read_text(encoding='utf-8'))
+        osm=json.loads((raw_dir/'osm-groceries.json').read_text())
         if 'remark' in osm:raise ValueError('Incomplete Overpass response')
         for e in osm['elements']:
             code=f'{e["type"]}/{e["id"]}';tags=e.get('tags',{})
@@ -548,85 +369,6 @@ def build(raw_dir, manifest, census_only=False):
                 valid_on=manifest['osm-groceries.json']['retrieved_at'][:10],
                 properties=dict(tags=tags,osm_type=e['type'],osm_id=e['id'],coordinate_role='source node' if 'lat' in e else 'source bounding-box centre; not entrance',
                                 date_basis='OSM retrieval snapshot; historical opening unknown',coverage='Toronto-area bounding box, includes adjacent municipalities')))
-    if (raw_dir/'osm-amenities.json').exists():
-        sid=source('osm-amenities.json','OpenStreetMap contributors','Dining, nightlife and everyday services from OpenStreetMap',
-            'Bounding box 43.58,-79.65 to 43.86,-79.11; includes adjacent municipalities; not neighbourhood counts',
-            'Open Database Licence 1.0; © OpenStreetMap contributors; https://www.openstreetmap.org/copyright')
-        osm=json.loads((raw_dir/'osm-amenities.json').read_text(encoding='utf-8'))
-        if 'remark' in osm:raise ValueError('Incomplete Overpass response')
-        for e in osm['elements']:
-            code=f'{e["type"]}/{e["id"]}';tags=e.get('tags',{})
-            staged(sid,code,tags.get('name',''),e)
-            xy=e if 'lat' in e else e.get('center',{})
-            category=OSM_AMENITY_CATEGORIES.get(tags.get('amenity'))
-            if not xy or not category:continue
-            out['places'].append(dict(source_id=sid,source_record_id=code,category=category,name=tags.get('name') or tags['amenity'],
-                latitude=str(Decimal(str(xy['lat'])).quantize(Decimal('0.0000001'))),
-                longitude=str(Decimal(str(xy['lon'])).quantize(Decimal('0.0000001'))),
-                valid_on=manifest['osm-amenities.json']['retrieved_at'][:10],
-                properties=dict(tags=tags,osm_type=e['type'],osm_id=e['id'],coordinate_role='source node' if 'lat' in e else 'source bounding-box centre; not entrance',
-                                date_basis='OSM retrieval snapshot; historical opening unknown',coverage='Toronto-area bounding box, includes adjacent municipalities')))
-    if (raw_dir/'child-care-centres.geojson').exists():
-        sid=source('child-care-centres.geojson','City of Toronto Children\'s Services','Licensed child care centres',
-            'Licensed centres in Toronto; source snapshot, not historical presence',
-            'Open Government Licence – Toronto')
-        date=manifest['child-care-centres.geojson']['retrieved_at'][:10]
-        for f in json.loads((raw_dir/'child-care-centres.geojson').read_text(encoding='utf-8'))['features']:
-            p=f['properties'];g=f['geometry'];code=str(p['LOC_ID'])
-            staged(sid,f'feature/{code}',p['LOC_NAME'],dict(properties=p,geometry=g))
-            if g is None:continue
-            if g['type'] not in ['Point','MultiPoint']:raise ValueError('Unexpected child care geometry')
-            if g['type']=='MultiPoint' and len(g['coordinates'])!=1:raise ValueError('Multiple child care locations in one feature')
-            xy=g['coordinates'][0] if g['type']=='MultiPoint' else g['coordinates']
-            out['places'].append(dict(source_id=sid,source_record_id=code,category='childcare',name=p['LOC_NAME'],
-                latitude=str(Decimal(str(xy[1])).quantize(Decimal('0.0000001'))),
-                longitude=str(Decimal(str(xy[0])).quantize(Decimal('0.0000001'))),valid_on=date,
-                properties=dict(source_attributes=p,total_spaces=p.get('TOTSPACE'),date_basis='retrieval snapshot; licensing date not given')))
-    if (raw_dir/'cultural-spaces.zip').exists():
-        sid=source('cultural-spaces.zip','City of Toronto Economic Development & Culture','Cultural Spaces (Making Space for Culture)',
-            'Cultural facilities in Toronto as inventoried for the 2019 Making Space for Culture study; not refreshed since',
-            'Open Government Licence – Toronto')
-        z=zipfile.ZipFile(raw_dir/'cultural-spaces.zip')
-        parts={n.rsplit('.',1)[-1]:io.BytesIO(z.read(n)) for n in z.namelist() if n.endswith(('.shp','.shx','.dbf'))}
-        # The DBF is Latin-1 (accented names such as "Club Hispano"); it has no .cpg file.
-        for sr in shapefile.Reader(**parts,encoding='latin-1').iterShapeRecords():
-            p=sr.record.as_dict();code=str(p['OBJECTID'])
-            staged(sid,f'feature/{code}',p['FAC_NAM'],dict(properties=p))
-            if p['LATITUDE'] is None or p['LONGITUDE'] is None:continue
-            out['places'].append(dict(source_id=sid,source_record_id=code,category='cultural_space',name=p['FAC_NAM'] or code,
-                latitude=str(Decimal(str(p['LATITUDE'])).quantize(Decimal('0.0000001'))),
-                longitude=str(Decimal(str(p['LONGITUDE'])).quantize(Decimal('0.0000001'))),
-                valid_on='2019-07-23',
-                properties=dict(source_attributes=p,space_types=[t for f,t in CULTURAL_SPACE_TYPES.items() if p.get(f)==1],
-                                date_basis='2019 City inventory (last refreshed 2019-07-23); current operation unverified')))
-    # Size of the area within 1 km of each neighbourhood, so place counts can be compared as densities.
-    boundaries={g['id']:g['geometry'] for g in out['geographies'] if g['geography_set_id'] in ('toronto-140','toronto-158')}
-    indicator('area-within-1km-km2','Area within 1 km of the neighbourhood','km2',
-        'Area of the neighbourhood plus a 1 km band around its boundary, on a local km projection',
-        'Neighbourhood boundary model','area',dict(buffer_km=1,purpose='denominator for place densities'))
-    for gset in ('toronto-140','toronto-158'):
-        bsid=next(s['source_id'] for s in out['geography_sets'] if s['id']==gset)  # that boundary file's release
-        bdate=next(s['retrieved_at'] for s in out['sources'] if s['id']==bsid)[:10]
-        for gid,km2 in area_within_km({k:v for k,v in boundaries.items() if k.startswith(gset+'-')}).items():
-            observe(bsid,gid,'area-within-1km-km2',int(bdate[:4]),bdate,str(Decimal(km2).quantize(Decimal('0.0001'))),
-                f'derived:{gid};buffer_km=1',notes='Derived from the boundary polygon on a local km projection')
-    # Place lists within 1 km of every 140 and 158 neighbourhood, stored under each list's own source.
-    for category,(label,tag,kinds) in NEARBY_CATEGORIES.items():
-        rows=[p for p in out['places'] if p['category']==category
-              and (kinds is None or p['properties'].get('tags',{}).get(tag) in kinds)]
-        if not rows:continue  # list not loaded: no counts, never zeros
-        sids={p['source_id'] for p in rows}
-        if len(sids)!=1:raise ValueError(f'{category} places come from several releases: {sorted(sids)}')
-        sid=sids.pop();date=max(p['valid_on'] for p in rows)
-        iid=f'places-within-1km-{category}'
-        indicator(iid,f'{label} within 1 km',category.replace('_',' ')+'s',
-            f'{label} inside the neighbourhood or within 1 km of its boundary, counted from the source snapshot',
-            'Current place-list snapshot; not historical presence','count',
-            dict(category=category,kinds=sorted(kinds) if kinds else None,buffer_km=1,source_id=sid,snapshot=date))
-        counts=places_within_km([(float(p['longitude']),float(p['latitude'])) for p in rows],boundaries)
-        for gid,count in counts.items():
-            observe(sid,gid,iid,int(date[:4]),date,str(count),f'derived:{gid};category={category}',
-                notes='Derived count on a local km projection; current snapshot applied to this boundary model')
     return out
 
 
@@ -640,7 +382,7 @@ def main():
     parser.add_argument('--output',type=Path,default=ROOT/'data/normalized/official.json')
     args=parser.parse_args()
     manifest_path=ROOT/'data/official-sources.json'
-    manifest=json.loads(manifest_path.read_text(encoding='utf-8'))  # utf-8
+    manifest=json.loads(manifest_path.read_text())
     unknown=[name for name in args.refresh if name not in manifest]
     if unknown:parser.error(f'--refresh: not in official-sources.json: {", ".join(unknown)}')
     if args.refresh and not args.download:parser.error('--refresh needs --download')
@@ -680,7 +422,7 @@ def main():
                 print(f'  new snapshot of {name}: sha256 {item["sha256"][:12]}... -> {digest[:12]}...')
                 item['sha256']=digest
                 item['retrieved_at']=datetime.now(timezone.utc).isoformat()
-                manifest_path.write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')  # utf-8
+                manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
             elif digest!=item['sha256']:
                 failed[name]=f'upstream changed; check it, then rerun with --refresh {name}'
                 continue
@@ -688,7 +430,7 @@ def main():
         for name,reason in failed.items():print(f'SKIPPED {name}: {reason}')
     bundle=build(args.raw_dir,manifest,census_only=args.census_only)
     args.output.parent.mkdir(parents=True,exist_ok=True)
-    args.output.write_text(json.dumps(bundle,ensure_ascii=False,separators=(',',':')),encoding='utf-8')  # utf-8
+    args.output.write_text(json.dumps(bundle,ensure_ascii=False,separators=(',',':')))
     print(json.dumps({k:len(v) for k,v in bundle.items()},indent=2))
 
 if __name__=='__main__':main()
