@@ -25,8 +25,10 @@ means replacing that one class. Configure with environment variables:
 """
 import json
 import os
+import re
 import time
 from datetime import timedelta
+from decimal import Decimal
 
 from .mcp_canada import MCPCanadaError, get_client
 from .mcp_canada_cache import fetch_from_mcp_canada
@@ -40,6 +42,8 @@ def log(message):
     print(f"[teacher] {message}", flush=True)
 CACHE_MAX_AGE = timedelta(days=7)
 MAX_RESULT_CHARS = 12_000  # keeps one tool result from filling the prompt
+# Text like "1740.00000000". Needs a decimal point, so codes like "095" are left alone.
+DECIMAL_TEXT = re.compile(r"-?\d+\.\d+")
 
 SYSTEM_PROMPT = """You are the AI teacher in a Toronto housing explorer for students.
 You explain published data: Census neighbourhood profiles and other Canadian open data.
@@ -50,6 +54,14 @@ Rules for numbers (these matter most):
 - If the student asks for a calculation (a change, a difference, a percentage), say the
   app does not compute that, and quote the published values it would use instead.
 - A missing value is unavailable, never zero. Say so instead of guessing.
+- If a tool returns a measure but its value is blank, null, or has status "missing", say
+  the source includes that measure but publishes no value for it. Never say the data is
+  "not tracked" or "not collected" in that case.
+- Before putting two values side by side, check that they are the same measure and the
+  same boundaries. If the measure differs (for example "average gross rent" in one year
+  and "median shelter cost" in another) or the neighbourhood boundaries differ (the 140
+  neighbourhoods vs the 158 neighbourhoods), quote both but say clearly that they are
+  not directly comparable, and why.
 - Dollar amounts are nominal (not adjusted for inflation) and are not current asking rents.
 
 How to answer:
@@ -57,7 +69,8 @@ How to answer:
 - For data that is not on screen, look in MCP-Canada first: find_canada_data_tools,
   then get_canada_data.
 - Only if MCP-Canada has no tool for it, or its tool fails or returns no rows, check the
-  app's database: find_app_data, then get_app_observations.
+  app's database: find_app_data, then get_app_observations. The app database tools refuse
+  to run until you have tried MCP-Canada for this question.
 - Name the source of every number you use.
 - If no tool has the data, say it is not available. Do not answer from memory.
 - Keep answers short (under 150 words), plain, and friendly. Explain what a value means
@@ -69,6 +82,17 @@ class TeacherUnavailable(Exception):
 
 
 # ---------------------------------------------------------------- tools (provider-neutral)
+
+def _tidy_numbers(value):
+    """Turn "1740.00000000" into "1740" anywhere inside MCP-Canada's data."""
+    if isinstance(value, dict):
+        return {key: _tidy_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_tidy_numbers(item) for item in value]
+    if isinstance(value, str) and DECIMAL_TEXT.fullmatch(value):
+        return format(Decimal(value).normalize(), "f")
+    return value
+
 
 def _clip(payload) -> str:
     text = json.dumps(payload, ensure_ascii=False, default=str)
@@ -86,6 +110,8 @@ class TeacherTools:
         self.fetch = fetch
         self.sources = []
         self.calls = []
+        # MCP-Canada first: the app database tools refuse until an MCP-Canada tool was called.
+        self.tried_mcp = False
 
     declarations = [
         {
@@ -120,7 +146,7 @@ class TeacherTools:
         },
         {
             "name": "find_app_data",
-            "description": "Fallback when MCP-Canada lacks the data: search the app's own database "
+            "description": "Fallback only, after trying MCP-Canada: search the app's own database "
                            "(e.g. Census 2001, CMHC rents, OSM places) for sources, indicators and "
                            "geographies whose names match the words. Returns their ids.",
             "parameters": {
@@ -154,6 +180,13 @@ class TeacherTools:
         return result
 
     def _dispatch(self, name: str, args: dict) -> str:
+        if name in ("find_canada_data_tools", "get_canada_data"):
+            self.tried_mcp = True  # set before the call, so a failed lookup still counts
+        if name in ("find_app_data", "get_app_observations") and not self.tried_mcp:
+            log(f"refused {name}: MCP-Canada not tried yet")
+            return _clip({"error": "Look in MCP-Canada first: call find_canada_data_tools, then "
+                                   "get_canada_data. Use the app database only if MCP-Canada "
+                                   "has no tool for this, or its tool fails or returns no rows."})
         try:
             if name == "get_screen_values":
                 return _clip(self.screen or {"note": "Nothing is selected on screen."})
@@ -189,7 +222,7 @@ class TeacherTools:
         source = result["source"]
         if source not in self.sources:
             self.sources.append(source)
-        return _clip({"status": result["status"], "source": source, "data": result["data"]})
+        return _clip({"status": result["status"], "source": source, "data": _tidy_numbers(result["data"])})
 
     def _find_app(self, query, per_kind=10):
         from django.db.models import Q
