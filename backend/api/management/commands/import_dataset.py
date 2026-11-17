@@ -36,8 +36,7 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true")
     def handle(self, *args, **options):
         try:
-            # Bundles are UTF-8; never fall back to the platform code page (cp1252 on Windows).
-            data = json.loads(Path(options["bundle"]).read_text(encoding="utf-8"))
+            data = json.loads(Path(options["bundle"]).read_text())
             if set(data) - set(MODELS):
                 raise ValueError("Unknown bundle section")
             with transaction.atomic():
