@@ -4,19 +4,26 @@ import Link from "next/link";
 import { measuredNumber, money } from "../explorer/NeighbourhoodDetailsPanel";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import type { SearchProfile } from "./state";
-import { lifestyleMatch, matchScore, type ComparisonExtras, type NearbyCategory, type PlaceExtras } from "./comparison-extras";
+import { lifestyleMatch, matchScore, type AmenityKey, type ComparisonExtras, type NearbyCategory } from "./comparison-extras";
 import styles from "./workflow.module.css";
 
 const ComparisonMap = dynamic(() => import("../map/ComparisonMap"), {
   ssr: false, loading: () => <div style={{ height: 180 }} role="status">Loading map…</div>,
 });
 
-const nearbyRows: [keyof Pick<PlaceExtras, "libraries" | "schools" | "groceries" | "transitStops">, string, string, NearbyCategory][] = [
+const nearbyRows: [AmenityKey, string, string, NearbyCategory][] = [
   ["libraries", "Libraries within 1 km", "Current branch list", "library"],
   ["schools", "Schools within 1 km", "City school list, all types", "school"],
+  ["childcare", "Licensed child care centres within 1 km", "City of Toronto Children's Services", "childcare"],
   ["groceries", "Supermarkets & grocers within 1 km", "OpenStreetMap; convenience stores excluded", "grocery"],
+  ["errands", "Pharmacies, banks & post offices within 1 km", "OpenStreetMap", "errand_service"],
   ["transitStops", "Transit stops within 1 km", "TTC schedule feed; each platform or direction counts", "transit_stop"],
+  ["dining", "Restaurants, cafés & bars within 1 km", "OpenStreetMap; includes pubs and nightclubs, fast food excluded", "dining"],
+  ["culturalSpaces", "Cultural spaces within 1 km", "City of Toronto 2019 inventory (not refreshed since): performance, arts, heritage, multipurpose", "cultural_space"],
 ];
+/** Gap labels for the "Data gaps" row. */
+const gapName: Record<NearbyCategory, string> = { library: "libraries", school: "schools", grocery: "groceries", transit_stop: "transit stops",
+  dining: "dining", errand_service: "everyday services", childcare: "child care", cultural_space: "cultural spaces" };
 
 export function ComparisonTable({ profiles, preferences, extras }: { profiles: NeighbourhoodProfile[]; preferences: SearchProfile | null; extras: ComparisonExtras | null }) {
   const costs = profiles.map(p => measuredNumber(p.metrics.cost));
@@ -40,6 +47,9 @@ export function ComparisonTable({ profiles, preferences, extras }: { profiles: N
     <tr><th scope="row">Population</th>{profiles.map(p => <td key={p.geography.id}>{num(extras?.byPlace[p.geography.id]?.population)}</td>)}</tr>
     <tr><th scope="row">Children (0–14)</th>{profiles.map(p => <td key={p.geography.id}>{pct(extras?.byPlace[p.geography.id]?.childrenPct)}</td>)}</tr>
     <tr><th scope="row">Seniors (65+)</th>{profiles.map(p => <td key={p.geography.id}>{pct(extras?.byPlace[p.geography.id]?.seniorsPct)}</td>)}</tr>
+    <tr><th scope="row">Houses & low-rise homes<small>Share of occupied dwellings: detached, semi, row, duplex · Census 2021 only</small></th>{profiles.map(p => <td key={p.geography.id}>{pct(extras?.byPlace[p.geography.id]?.lowRisePct)}</td>)}</tr>
+    <tr><th scope="row">Immigrants<small>Share of residents · Census 2021 only · for context, not scored</small></th>{profiles.map(p => <td key={p.geography.id}>{pct(extras?.byPlace[p.geography.id]?.immigrantPct)}</td>)}</tr>
+    <tr><th scope="row">Visible minority residents<small>Share of residents · Census 2021 only · for context, not scored</small></th>{profiles.map(p => <td key={p.geography.id}>{pct(extras?.byPlace[p.geography.id]?.visibleMinorityPct)}</td>)}</tr>
     {(["To work", "To school"] as const).map(label => <tr key={label}><th scope="row">{label}<small>Needs address routing, not available yet</small></th>{profiles.map(p => <td key={p.geography.id}>—</td>)}</tr>)}
     {nearbyRows.map(([key, label, note, category]) => <tr key={key}><th scope="row">{label}<small>{note}{extras?.asOf[category] ? ` · ${extras.asOf[category]}` : ""}, not historical</small></th>{profiles.map(p => { const place = extras?.byPlace[p.geography.id]; const r = place?.ranks?.[key];
       return <td key={p.geography.id}>{extras ? <>{num(place?.[key])}{r != null && <small>Denser than about {r}% of {p.geography.boundary_set === "toronto-140" ? "the 140" : "the 158"} neighbourhoods</small>}</> : "…"}</td>; })}</tr>)}
@@ -50,7 +60,7 @@ export function ComparisonTable({ profiles, preferences, extras }: { profiles: N
     <tr><th scope="row">Lifestyle match<small>Your chosen lifestyle priorities that have data</small></th>{profiles.map(p => { const m = extras ? lifestyleMatch(extras.byPlace[p.geography.id], preferences?.priorities) : null;
       return <td key={p.geography.id}>{!extras ? "…" : !m ? <>—<small>Choose lifestyle priorities in your profile</small></> : <>{m.score === null ? "—" : `${m.score} / 100`}<small>{[m.scored.length ? `Scored: ${m.scored.join(", ")}` : "", m.unscored.length ? `Not scored (no data): ${m.unscored.join(", ")}` : ""].filter(Boolean).join(" · ")}</small></>}</td>; })}</tr>
     <tr><th scope="row">Data gaps</th>{profiles.map(p => { const place = extras?.byPlace[p.geography.id];
-      const gaps = ["commute", ...(extras && place?.parks == null ? ["parks"] : []), ...(extras && lifestyleMatch(place, preferences?.priorities)?.score == null ? ["lifestyle"] : []), ...(extras && !place?.safety ? ["safety"] : []), ...nearbyRows.flatMap(([key, , , category]) => extras && place?.[key] == null ? [category.replace("_", " ") + "s"] : []), ...(measuredNumber(p.metrics.cost) === null ? ["shelter cost"] : [])];
+      const gaps = ["commute", ...(extras && place?.parks == null ? ["parks"] : []), ...(extras && lifestyleMatch(place, preferences?.priorities)?.score == null ? ["lifestyle"] : []), ...(extras && !place?.safety ? ["safety"] : []), ...nearbyRows.flatMap(([key, , , category]) => extras && place?.[key] == null ? [gapName[category]] : []), ...(measuredNumber(p.metrics.cost) === null ? ["shelter cost"] : [])];
       return <td key={p.geography.id}>{p.available_years.length === 0 ? `No ${p.year} Census data for this area (boundaries changed in 2021). ` : ""}{gaps.join(", ").replace(/^./, c => c.toUpperCase())}</td>; })}</tr>
   </tbody></table></div>;
 }

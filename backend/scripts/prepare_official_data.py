@@ -60,7 +60,11 @@ def load_live_meta(raw_dir, name, item):
         return
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-    if meta.get('sha256') != digest:
+    if meta.get('sha256') != digest and digest == item.get('sha256'):
+        # The pinned snapshot (e.g. from the release mirror): keep its pinned retrieved_at.
+        meta = dict(sha256=digest, retrieved_at=item['retrieved_at'])
+        save_live_meta(raw_dir, name, meta)
+    elif meta.get('sha256') != digest:
         # No (matching) record of this copy: date it by the file's modification time.
         modified = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
         meta = dict(sha256=digest, retrieved_at=modified)
@@ -180,12 +184,24 @@ def green_space_measures(features, boundaries, buffer_km=1.0):
 
 
 # Place lists counted per neighbourhood; groceries exclude convenience stores (OSM shop tag).
+# category -> (label, OSM tag that selects the counted kinds or None, counted kinds or None = all)
 NEARBY_CATEGORIES = {
-    'library': ('Library branches', None),
-    'school': ('Schools (all types)', None),
-    'grocery': ('Supermarkets and greengrocers', {'supermarket', 'greengrocer'}),
-    'transit_stop': ('TTC stops (each GTFS stop record: platform, direction, station or entrance)', None),
+    'library': ('Library branches', None, None),
+    'school': ('Schools (all types)', None, None),
+    'grocery': ('Supermarkets and greengrocers', 'shop', {'supermarket', 'greengrocer'}),
+    'transit_stop': ('TTC stops (each GTFS stop record: platform, direction, station or entrance)', None, None),
+    # Sit-down dining and nightlife; fast food is stored but not counted.
+    'dining': ('Restaurants, cafes, bars, pubs and nightclubs', 'amenity',
+               {'restaurant', 'cafe', 'bar', 'pub', 'nightclub', 'biergarten'}),
+    'errand_service': ('Pharmacies, banks and post offices', 'amenity', {'pharmacy', 'bank', 'post_office'}),
+    'childcare': ('Licensed child care centres', None, None),
+    'cultural_space': ('Cultural spaces (City of Toronto 2019 inventory)', None, None),
 }
+# OSM amenity -> stored place category (osm-amenities.json).
+OSM_AMENITY_CATEGORIES = {**dict.fromkeys(['restaurant', 'cafe', 'bar', 'pub', 'nightclub', 'biergarten', 'fast_food'], 'dining'),
+                          **dict.fromkeys(['pharmacy', 'bank', 'post_office'], 'errand_service')}
+CULTURAL_SPACE_TYPES = {'PERFRMANCE': 'performance', 'EXHBVISART': 'exhibition_visual_arts', 'SCRN_BASSE': 'screen_based',
+                        'LIBRARY': 'library', 'MULTIPURP': 'multipurpose', 'HERITAGE': 'heritage'}
 
 
 def places_within_km(points, boundaries, buffer_km=1.0):
@@ -268,7 +284,8 @@ def build(raw_dir, manifest, census_only=False):
                (301,'households',2021),(302,'households',2021),(361,'households',2021),(363,'households',2021),
                (368,'households',2021),(370,'percent',2021),(372,'CAD/month',2021),(373,'CAD/month',2021),
                (376,'households',2021),(378,'percent',2021),(380,'CAD/month',2021),(381,'CAD/month',2021),
-               (1487,'persons',2021),(1488,'persons',2021),(1643,'persons',2021)]}
+               *[(i,'dwellings',2021) for i in range(217,226)],  # occupied dwellings by structural type
+               (1486,'persons',2021),(1487,'persons',2021),(1488,'persons',2021),(1642,'persons',2021),(1643,'persons',2021)]}
     for year in [2001,2006,2011,2016,2021]:
         filename=f'census-{year}.'+('xlsx' if year==2021 else 'csv')
         sid=source(filename,'City of Toronto / Statistics Canada',f'{year} neighbourhood full Census profile',
@@ -531,6 +548,57 @@ def build(raw_dir, manifest, census_only=False):
                 valid_on=manifest['osm-groceries.json']['retrieved_at'][:10],
                 properties=dict(tags=tags,osm_type=e['type'],osm_id=e['id'],coordinate_role='source node' if 'lat' in e else 'source bounding-box centre; not entrance',
                                 date_basis='OSM retrieval snapshot; historical opening unknown',coverage='Toronto-area bounding box, includes adjacent municipalities')))
+    if (raw_dir/'osm-amenities.json').exists():
+        sid=source('osm-amenities.json','OpenStreetMap contributors','Dining, nightlife and everyday services from OpenStreetMap',
+            'Bounding box 43.58,-79.65 to 43.86,-79.11; includes adjacent municipalities; not neighbourhood counts',
+            'Open Database Licence 1.0; © OpenStreetMap contributors; https://www.openstreetmap.org/copyright')
+        osm=json.loads((raw_dir/'osm-amenities.json').read_text(encoding='utf-8'))
+        if 'remark' in osm:raise ValueError('Incomplete Overpass response')
+        for e in osm['elements']:
+            code=f'{e["type"]}/{e["id"]}';tags=e.get('tags',{})
+            staged(sid,code,tags.get('name',''),e)
+            xy=e if 'lat' in e else e.get('center',{})
+            category=OSM_AMENITY_CATEGORIES.get(tags.get('amenity'))
+            if not xy or not category:continue
+            out['places'].append(dict(source_id=sid,source_record_id=code,category=category,name=tags.get('name') or tags['amenity'],
+                latitude=str(Decimal(str(xy['lat'])).quantize(Decimal('0.0000001'))),
+                longitude=str(Decimal(str(xy['lon'])).quantize(Decimal('0.0000001'))),
+                valid_on=manifest['osm-amenities.json']['retrieved_at'][:10],
+                properties=dict(tags=tags,osm_type=e['type'],osm_id=e['id'],coordinate_role='source node' if 'lat' in e else 'source bounding-box centre; not entrance',
+                                date_basis='OSM retrieval snapshot; historical opening unknown',coverage='Toronto-area bounding box, includes adjacent municipalities')))
+    if (raw_dir/'child-care-centres.geojson').exists():
+        sid=source('child-care-centres.geojson','City of Toronto Children\'s Services','Licensed child care centres',
+            'Licensed centres in Toronto; source snapshot, not historical presence',
+            'Open Government Licence – Toronto')
+        date=manifest['child-care-centres.geojson']['retrieved_at'][:10]
+        for f in json.loads((raw_dir/'child-care-centres.geojson').read_text(encoding='utf-8'))['features']:
+            p=f['properties'];g=f['geometry'];code=str(p['LOC_ID'])
+            staged(sid,f'feature/{code}',p['LOC_NAME'],dict(properties=p,geometry=g))
+            if g is None:continue
+            if g['type'] not in ['Point','MultiPoint']:raise ValueError('Unexpected child care geometry')
+            if g['type']=='MultiPoint' and len(g['coordinates'])!=1:raise ValueError('Multiple child care locations in one feature')
+            xy=g['coordinates'][0] if g['type']=='MultiPoint' else g['coordinates']
+            out['places'].append(dict(source_id=sid,source_record_id=code,category='childcare',name=p['LOC_NAME'],
+                latitude=str(Decimal(str(xy[1])).quantize(Decimal('0.0000001'))),
+                longitude=str(Decimal(str(xy[0])).quantize(Decimal('0.0000001'))),valid_on=date,
+                properties=dict(source_attributes=p,total_spaces=p.get('TOTSPACE'),date_basis='retrieval snapshot; licensing date not given')))
+    if (raw_dir/'cultural-spaces.zip').exists():
+        sid=source('cultural-spaces.zip','City of Toronto Economic Development & Culture','Cultural Spaces (Making Space for Culture)',
+            'Cultural facilities in Toronto as inventoried for the 2019 Making Space for Culture study; not refreshed since',
+            'Open Government Licence – Toronto')
+        z=zipfile.ZipFile(raw_dir/'cultural-spaces.zip')
+        parts={n.rsplit('.',1)[-1]:io.BytesIO(z.read(n)) for n in z.namelist() if n.endswith(('.shp','.shx','.dbf'))}
+        # The DBF is Latin-1 (accented names such as "Club Hispano"); it has no .cpg file.
+        for sr in shapefile.Reader(**parts,encoding='latin-1').iterShapeRecords():
+            p=sr.record.as_dict();code=str(p['OBJECTID'])
+            staged(sid,f'feature/{code}',p['FAC_NAM'],dict(properties=p))
+            if p['LATITUDE'] is None or p['LONGITUDE'] is None:continue
+            out['places'].append(dict(source_id=sid,source_record_id=code,category='cultural_space',name=p['FAC_NAM'] or code,
+                latitude=str(Decimal(str(p['LATITUDE'])).quantize(Decimal('0.0000001'))),
+                longitude=str(Decimal(str(p['LONGITUDE'])).quantize(Decimal('0.0000001'))),
+                valid_on='2019-07-23',
+                properties=dict(source_attributes=p,space_types=[t for f,t in CULTURAL_SPACE_TYPES.items() if p.get(f)==1],
+                                date_basis='2019 City inventory (last refreshed 2019-07-23); current operation unverified')))
     # Size of the area within 1 km of each neighbourhood, so place counts can be compared as densities.
     boundaries={g['id']:g['geometry'] for g in out['geographies'] if g['geography_set_id'] in ('toronto-140','toronto-158')}
     indicator('area-within-1km-km2','Area within 1 km of the neighbourhood','km2',
@@ -543,9 +611,9 @@ def build(raw_dir, manifest, census_only=False):
             observe(bsid,gid,'area-within-1km-km2',int(bdate[:4]),bdate,str(Decimal(km2).quantize(Decimal('0.0001'))),
                 f'derived:{gid};buffer_km=1',notes='Derived from the boundary polygon on a local km projection')
     # Place lists within 1 km of every 140 and 158 neighbourhood, stored under each list's own source.
-    for category,(label,kinds) in NEARBY_CATEGORIES.items():
+    for category,(label,tag,kinds) in NEARBY_CATEGORIES.items():
         rows=[p for p in out['places'] if p['category']==category
-              and (kinds is None or p['properties'].get('tags',{}).get('shop') in kinds)]
+              and (kinds is None or p['properties'].get('tags',{}).get(tag) in kinds)]
         if not rows:continue  # list not loaded: no counts, never zeros
         sids={p['source_id'] for p in rows}
         if len(sids)!=1:raise ValueError(f'{category} places come from several releases: {sorted(sids)}')

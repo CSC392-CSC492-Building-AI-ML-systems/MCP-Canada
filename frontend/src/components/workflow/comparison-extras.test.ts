@@ -5,8 +5,9 @@ import { lifestyleMatch, matchScore, neighbourhoodMeasures, percentRank, rankAll
 import type { SearchProfile } from "./state";
 
 const profile: SearchProfile = { version: 1, income: "72000", rent: "1500", bedrooms: "2", mode: "Transit", work: "", school: "", trip: 30, priorities: [1], weights: [0, 0, 0, 5, 5, 0], interests: [], notes: "" };
-const noRanks = { libraries: null, schools: null, groceries: null, transitStops: null };
-const empty: PlaceExtras = { population: null, childrenPct: null, seniorsPct: null, libraries: null, schools: null, groceries: null, transitStops: null, ranks: noRanks, safety: null, safetyGap: null, parks: null, greenSharePct: null, greenRank: null };
+const noRanks = { libraries: null, schools: null, groceries: null, transitStops: null, dining: null, errands: null, childcare: null, culturalSpaces: null };
+const empty: PlaceExtras = { population: null, childrenPct: null, seniorsPct: null, lowRisePct: null, immigrantPct: null, visibleMinorityPct: null,
+  ...noRanks, ranks: noRanks, safety: null, safetyGap: null, parks: null, greenSharePct: null, greenRank: null };
 const ranked = (ranks: Partial<PlaceExtras["ranks"]>): PlaceExtras => ({ ...empty, ranks: { ...noRanks, ...ranks } });
 
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -56,9 +57,31 @@ it("scores only chosen lifestyle priorities that have data and lists the rest", 
 it("adds lifestyle to the match score with its own weight, and scores parks from the green rank", () => {
   const lifestyleOnly = { ...profile, weights: [0, 0, 0, 0, 0, 5], priorities: [1] };
   expect(matchScore(null, ranked({ transitStops: 30 }), lifestyleOnly)).toEqual({ score: 30, covers: ["lifestyle"] });
-  // 2 = Parks & green space; 3 = Restaurants & nightlife (still unscored)
+  // 2 = Parks & green space; 3 = Restaurants & nightlife (no dining rank here, so unscored)
   expect(lifestyleMatch({ ...empty, greenRank: 70 }, [2, 3])).toEqual({ score: 70, scored: ["Parks & green space"], unscored: ["Restaurants & nightlife"] });
   expect(lifestyleMatch(empty, [2])?.score).toBeNull();
+});
+
+it("scores dining, quiet, culture, errands and family priorities from their lists", () => {
+  // 3 Restaurants & nightlife, 4 Quiet & residential, 5 Cultural community
+  const lively = { ...ranked({ dining: 90, culturalSpaces: 60 }), lowRisePct: 10 };
+  // dining 90; quiet = mean(low-rise 10, 100 - dining 90 = 10) = 10; culture 60 → mean 53
+  expect(lifestyleMatch(lively, [3, 4, 5])).toEqual({ score: 53, scored: ["Restaurants & nightlife", "Quiet & residential", "Cultural community"], unscored: [] });
+  // Quiet uses whichever half exists: low-rise share alone, or fewer restaurants alone.
+  expect(lifestyleMatch({ ...empty, lowRisePct: 80 }, [4])?.score).toBe(80);
+  expect(lifestyleMatch(ranked({ dining: 25 }), [4])?.score).toBe(75);
+  // Diversity shares are context only: they never score Cultural community.
+  expect(lifestyleMatch({ ...empty, immigrantPct: 60, visibleMinorityPct: 70 }, [5])).toEqual({ score: null, scored: [], unscored: ["Cultural community"] });
+  // 6 Walkable errands = mean(groceries, libraries, everyday services); 0 Family-friendly adds child care.
+  expect(lifestyleMatch(ranked({ groceries: 30, libraries: 60, errands: 90 }), [6])?.score).toBe(60);
+  expect(lifestyleMatch({ ...ranked({ schools: 40, childcare: 80 }), childrenPct: 20 }, [0])?.score).toBe(73);
+});
+
+it("keeps the nearby-amenities factor on the four core lists", () => {
+  const amenitiesOnly = { ...profile, weights: [0, 0, 0, 5, 0, 0] };
+  // dining, errands, child care and cultural ranks are lifestyle inputs, not amenities.
+  expect(matchScore(null, ranked({ libraries: 50, dining: 100, errands: 100, childcare: 100, culturalSpaces: 100 }), amenitiesOnly))
+    .toEqual({ score: 50, covers: ["amenities"] });
 });
 
 // --- neighbourhoodMeasures against a fake /api/observations/batch/ ---

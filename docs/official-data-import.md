@@ -120,10 +120,24 @@ derives two indicators for every 140 and 158 neighbourhood: `green-parks-within-
 area; golf courses, building grounds and road fragments are excluded). Any unreviewed
 `AREA_CLASS` stops the build. These are current-snapshot measures, not historical values.
 
-**Places within 1 km** (`places-within-1km-library`, `-school`, `-grocery`, `-transit_stop`)
+**Places within 1 km** (`places-within-1km-library`, `-school`, `-grocery`, `-transit_stop`,
+`-dining`, `-errand_service`, `-childcare`, `-cultural_space`)
 count each place list inside every 140 and 158 neighbourhood or within 1 km of its boundary.
 Each is stored under its own place list's release. Groceries are OSM supermarkets and
 greengrocers, excluding convenience stores; transit counts every GTFS stop record.
+Dining is OSM restaurants, cafes, bars, pubs, nightclubs and biergartens (fast food is
+stored as `dining` places but not counted); everyday services are OSM pharmacies, banks
+and post offices (both from `osm-amenities.json`). Child care is the City's licensed
+centre list (refreshed daily; capacity kept in `total_spaces`). Cultural spaces are the
+City's 2019 Making Space for Culture inventory, which is no longer refreshed, so its counts
+describe 2019. These lists back the lifestyle priorities on the compare page.
+
+**Census 2021 housing and population mix:** rows 217–225 (occupied dwellings by structural
+type) and 1486/1642 (the totals for immigrant status and visible minority) are reviewed
+indicators. The compare page reports the low-rise share (single-detached, semi-detached,
+row, duplex and other single-attached of all occupied dwellings) and immigrant and
+visible-minority shares. The diversity shares are shown for context only and are never
+scored. The 2001–2016 equivalents are not yet reviewed, so these rows are blank for those years.
 `area-within-1km-km2` (under each boundary release) is the size of that area, so the compare
 page can rank place densities rather than raw counts, which favour large neighbourhoods.
 

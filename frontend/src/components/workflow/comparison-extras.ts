@@ -1,20 +1,24 @@
 /** Extra comparison rows built only from data already loaded in the backend:
- * Census population and age mix, Toronto-wide CMHC rent for the user's bedrooms,
- * libraries, schools, grocers and transit stops near each neighbourhood, and
- * Toronto Police reported major crime for the selected year. */
+ * Census population, age mix, housing types and newcomer/visible-minority shares,
+ * Toronto-wide CMHC rent for the user's bedrooms, place lists near each neighbourhood
+ * (libraries, schools, grocers, transit stops, dining, everyday services, child care,
+ * cultural spaces), and Toronto Police reported major crime for the selected year. */
 import type { Catalog } from "../explorer/data";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import { LIFESTYLE_OPTIONS, type SearchProfile } from "./state";
 
 export type ExtraSource = { id: string; title: string; publisher: string; url: string };
-export type NearbyCategory = "library" | "school" | "grocery" | "transit_stop";
-export type AmenityKey = "libraries" | "schools" | "groceries" | "transitStops";
+export type NearbyCategory = "library" | "school" | "grocery" | "transit_stop" | "dining" | "errand_service" | "childcare" | "cultural_space";
+export type AmenityKey = "libraries" | "schools" | "groceries" | "transitStops" | "dining" | "errands" | "childcare" | "culturalSpaces";
+/** Census shares beyond the age mix; published for 2021 only so far (null for other years). */
+type CensusShares = { lowRisePct: number | null; immigrantPct: number | null; visibleMinorityPct: number | null };
 /** Reported major crime per 100,000 residents, with its rank among Toronto's 158 neighbourhoods. */
 export type Safety = { rate: number; year: number; cityMedian: number; saferThanPct: number };
-export type PlaceExtras = {
+export type PlaceExtras = CensusShares & {
   population: number | null; childrenPct: number | null; seniorsPct: number | null;
   /** Places within 1 km (counts shown in the table). */
   libraries: number | null; schools: number | null; groceries: number | null; transitStops: number | null;
+  dining: number | null; errands: number | null; childcare: number | null; culturalSpaces: number | null;
   /** Rank (0–100) of each count's density among all areas in the same boundary set; null = not ranked. */
   ranks: Record<AmenityKey, number | null>;
   safety: Safety | null;
@@ -35,15 +39,23 @@ export type ComparisonExtras = {
 export const emptyExtras: ComparisonExtras = { byPlace: {}, cityRent: null, asOf: {}, sources: [] };
 
 // Reviewed Census row IDs. Children are 0–14 and seniors 65+ in every year.
-type AgeRows = { population: number; total: number[]; children: number[]; seniors: number[]; percent?: boolean };
+type AgeRows = { population: number; total: number[]; children: number[]; seniors: number[]; percent?: boolean;
+  /** Counts whose share of a total row is reported (e.g. low-rise dwellings of all occupied dwellings). */
+  shares?: Record<keyof CensusShares, { parts: number[]; total: number }> };
 const ageRows: Record<number, AgeRows> = {
   2001: { population: 3, total: [6], children: [7, 8, 9], seniors: [20, 21, 22, 23, 24, 25, 26, 27] },
   2006: { population: 3, total: [6], children: [7, 8, 9], seniors: [20, 21, 22, 23, 24, 25, 26, 27] },
   2011: { population: 2, total: [9], children: [10], seniors: [29, 33, 38] },
   2016: { population: 4, total: [11, 12, 13, 14, 15], children: [11], seniors: [15] },
   // 2021 publishes the shares directly; its population is the age total (25% sample).
-  2021: { population: 4, total: [], children: [31], seniors: [33], percent: true },
+  2021: { population: 4, total: [], children: [31], seniors: [33], percent: true, shares: {
+    // Ground-oriented and low-rise: single-detached, semi-detached, row, duplex, other single-attached.
+    lowRisePct: { parts: [218, 219, 220, 221, 224], total: 217 },
+    immigrantPct: { parts: [1488], total: 1486 },
+    visibleMinorityPct: { parts: [1643], total: 1642 },
+  } },
 };
+const noShares = (): CensusShares => ({ lowRisePct: null, immigrantPct: null, visibleMinorityPct: null });
 
 type BatchRow = { geography_id: string; value: string | null; status: string; census_year: number | null; reference_year: number; period: string };
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -57,10 +69,11 @@ const observed = (row?: BatchRow) => row && row.status === "observed" && row.val
 async function censusRows(catalog: Catalog, year: number, setId: string, ids: string[], signal?: AbortSignal) {
   const rows = ageRows[year];
   const releases = catalog.sources.filter(s => s.id.startsWith(`census-${year}-`));
-  const empty = Object.fromEntries(ids.map(id => [id, { population: null, childrenPct: null, seniorsPct: null }]));
+  const empty = Object.fromEntries(ids.map(id => [id, { population: null, childrenPct: null, seniorsPct: null, ...noShares() }]));
   if (!rows || releases.length !== 1) return { values: empty, source: null };
   const source = releases[0];
-  const all = [...new Set([rows.population, ...rows.total, ...rows.children, ...rows.seniors])];
+  const shareRows = Object.values(rows.shares ?? {}).flatMap(s => [...s.parts, s.total]);
+  const all = [...new Set([rows.population, ...rows.total, ...rows.children, ...rows.seniors, ...shareRows])];
   const results = await Promise.all(all.map(async row => {
     const indicator = `census-${year}-row-${row}`;
     if (!catalog.indicators.some(i => i.id === indicator)) return [row, new Map<string, number | null>()] as const;
@@ -83,10 +96,17 @@ async function censusRows(catalog: Catalog, year: number, setId: string, ids: st
     const part = sum(id, list); const total = sum(id, rows.total);
     return part !== null && total ? part / total * 100 : null;
   };
+  const countShare = (id: string, s: { parts: number[]; total: number } | undefined) => {
+    if (!s) return null;
+    const part = sum(id, s.parts); const total = lookup.get(s.total)?.get(id) ?? null;
+    return part !== null && total ? Math.min(part / total * 100, 100) : null;
+  };
   const values = Object.fromEntries(ids.map(id => [id, {
     population: lookup.get(rows.population)?.get(id) ?? null,
     childrenPct: share(id, rows.children), seniorsPct: share(id, rows.seniors),
-  }]));
+    lowRisePct: countShare(id, rows.shares?.lowRisePct), immigrantPct: countShare(id, rows.shares?.immigrantPct),
+    visibleMinorityPct: countShare(id, rows.shares?.visibleMinorityPct),
+  } satisfies CensusShares & Pick<PlaceExtras, "population" | "childrenPct" | "seniorsPct">]));
   return { values, source };
 }
 
@@ -181,11 +201,14 @@ async function setValues(set: string, indicator: string, source: string, signal?
 
 /** Rows read for each place list: the table field, its source category, and the stored count indicator. */
 export const AMENITY_LISTS: [AmenityKey, NearbyCategory][] = [
-  ["libraries", "library"], ["schools", "school"], ["groceries", "grocery"], ["transitStops", "transit_stop"]];
+  ["libraries", "library"], ["schools", "school"], ["groceries", "grocery"], ["transitStops", "transit_stop"],
+  ["dining", "dining"], ["errands", "errand_service"], ["childcare", "childcare"], ["culturalSpaces", "cultural_space"]];
+/** The lists averaged into the "Nearby amenities" factor; the others feed lifestyle priorities only. */
+export const CORE_AMENITIES: AmenityKey[] = ["libraries", "schools", "groceries", "transitStops"];
 const AREA_INDICATOR = "area-within-1km-km2";
 type MeasureValues = Pick<PlaceExtras, AmenityKey | "ranks" | "parks" | "greenSharePct" | "greenRank">;
-const noMeasures = (): MeasureValues => ({ libraries: null, schools: null, groceries: null, transitStops: null,
-  ranks: { libraries: null, schools: null, groceries: null, transitStops: null }, parks: null, greenSharePct: null, greenRank: null });
+const noAmenities = () => Object.fromEntries(AMENITY_LISTS.map(([key]) => [key, null])) as Record<AmenityKey, null>;
+const noMeasures = (): MeasureValues => ({ ...noAmenities(), ranks: noAmenities(), parks: null, greenSharePct: null, greenRank: null });
 
 /** Place counts and green space for the compared areas, ranked against every area in the same
  * boundary set. Counts are ranked as densities (per km² within 1 km), so a neighbourhood does not
@@ -250,12 +273,12 @@ export async function loadComparisonExtras(catalog: Catalog, profiles: Neighbour
     settle(neighbourhoodMeasures(catalog, profiles, signal), { byPlace: {}, asOf: {}, sources: [] }),
     settle(safety(catalog, profiles, year, signal), { byPlace: {}, source: null }),
   ]);
-  const censusValues = Object.assign({}, ...census.map(c => c.values)) as Record<string, Pick<PlaceExtras, "population" | "childrenPct" | "seniorsPct">>;
+  const censusValues = Object.assign({}, ...census.map(c => c.values)) as Record<string, CensusShares & Pick<PlaceExtras, "population" | "childrenPct" | "seniorsPct">>;
   const byPlace = Object.fromEntries(profiles.map(p => {
     const id = dataId(p); const g = p.geography.id;
     const values = id ? censusValues[id] : undefined;
     return [g, {
-      population: null, childrenPct: null, seniorsPct: null, ...values,
+      population: null, childrenPct: null, seniorsPct: null, ...noShares(), ...values,
       ...(measures.byPlace[g] ?? noMeasures()),
       ...(crime.byPlace[g] ?? { safety: null, safetyGap: "Police crime data unavailable" }),
     } satisfies PlaceExtras];
@@ -275,13 +298,15 @@ const mean = (values: (number | null)[]) => {
 export const FAMILY_CHILDREN_PCT = 20;
 /** How each lifestyle priority is scored from the data shown in the table; null = no data source. */
 const LIFESTYLE_SCORERS: Record<(typeof LIFESTYLE_OPTIONS)[number], ((e: PlaceExtras | undefined) => number | null) | null> = {
-  "Family-friendly": e => mean([e?.childrenPct != null ? Math.min(e.childrenPct / FAMILY_CHILDREN_PCT, 1) * 100 : null, rank(e, "schools")]),
+  "Family-friendly": e => mean([e?.childrenPct != null ? Math.min(e.childrenPct / FAMILY_CHILDREN_PCT, 1) * 100 : null, rank(e, "schools"), rank(e, "childcare")]),
   "Transit access": e => rank(e, "transitStops"),
   "Parks & green space": e => e?.greenRank ?? null,
-  "Restaurants & nightlife": null,
-  "Quiet & residential": null,
-  "Cultural community": null,
-  "Walkable errands": e => mean([rank(e, "groceries"), rank(e, "libraries")]),
+  "Restaurants & nightlife": e => rank(e, "dining"),
+  // Low-rise housing share, and fewer restaurants and bars nearby than other neighbourhoods.
+  "Quiet & residential": e => { const d = rank(e, "dining"); return mean([e?.lowRisePct ?? null, d === null ? null : 100 - d]); },
+  // Cultural venues only; Census diversity figures are shown in the table but never scored.
+  "Cultural community": e => rank(e, "culturalSpaces"),
+  "Walkable errands": e => mean([rank(e, "groceries"), rank(e, "libraries"), rank(e, "errands")]),
   "Good school access": e => rank(e, "schools"),
 };
 export type LifestyleMatch = { score: number | null; scored: string[]; unscored: string[] };
@@ -306,7 +331,7 @@ export function matchScore(shelterCost: number | null, extras: PlaceExtras | und
   const budget = Number(preferences.rent);
   if (shelterCost !== null && budget > 0) parts.push({ weight: preferences.weights[0] ?? 0, name: "affordability",
     value: Math.max(0, Math.min(100, (1.25 - shelterCost / budget) / 0.5 * 100)) });
-  const amenities = mean(AMENITY_LISTS.map(([key]) => rank(extras, key)));
+  const amenities = mean(CORE_AMENITIES.map(key => rank(extras, key)));
   if (amenities !== null) parts.push({ weight: preferences.weights[3] ?? 0, name: "amenities", value: amenities });
   if (extras?.safety) parts.push({ weight: preferences.weights[4] ?? 0, name: "safety", value: extras.safety.saferThanPct });
   const lifestyle = lifestyleMatch(extras, preferences.priorities)?.score ?? null;
