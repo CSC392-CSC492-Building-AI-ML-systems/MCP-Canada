@@ -4,6 +4,11 @@ export type SearchProfile = {
   work: string; school: string; trip: number; priorities: number[]; weights: number[];
   interests: string[]; notes: string;
 };
+/** Lifestyle priorities; a profile stores up to three of these by index. */
+export const LIFESTYLE_OPTIONS = [
+  "Family-friendly", "Transit access", "Parks & green space", "Restaurants & nightlife",
+  "Quiet & residential", "Cultural community", "Walkable errands", "Good school access",
+] as const;
 export const PROFILE_KEY = "mcp-canada-profile-v1";
 export const SAVED_KEY = "mcp-canada-saved-housing";
 export const RECOMMENDED_KEY = "mcp-canada-recommended-v1";
