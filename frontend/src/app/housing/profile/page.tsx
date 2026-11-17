@@ -3,10 +3,13 @@
 import Link from 'next/link';
 import { useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
-import { LIFESTYLE_OPTIONS, PROFILE_KEY, RECOMMENDED_KEY, clearProfile, parseProfile, readSession, subscribeSession, writeSession, type SearchProfile } from '@/components/workflow/state';
+import { PROFILE_KEY, RECOMMENDED_KEY, clearProfile, parseProfile, readSession, subscribeSession, writeSession, type SearchProfile } from '@/components/workflow/state';
 import styles from '../data/profile.module.css';
 
-const lifestyleOptions = LIFESTYLE_OPTIONS;
+const lifestyleOptions = [
+  'Family-friendly', 'Transit access', 'Parks & green space', 'Restaurants & nightlife',
+  'Quiet & residential', 'Cultural community', 'Walkable errands', 'Good school access',
+];
 const historyOptions = ['Community stories', 'Transport & growth', 'Buildings & heritage'];
 const factors = ['Affordability', 'Commute to work', 'School distance', 'Nearby amenities', 'Safety', 'Lifestyle match'];
 const modes = ['Transit', 'Walk', 'Bike', 'Drive'];
