@@ -1,8 +1,8 @@
 /** Extra comparison rows built only from data already loaded in the backend:
  * Census population, age mix, housing types and newcomer/visible-minority shares,
- * Toronto-wide CMHC rent for the user's bedrooms, place lists near each neighbourhood
- * (libraries, schools, grocers, transit stops, dining, everyday services, child care,
- * cultural spaces), and Toronto Police reported major crime for the selected year. */
+ * place lists near each neighbourhood (libraries, schools, grocers, transit stops,
+ * dining, everyday services, child care, cultural spaces), and Toronto Police reported
+ * major crime for the selected year. */
 import type { Catalog } from "../explorer/data";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import { LIFESTYLE_OPTIONS, type SearchProfile } from "./state";
@@ -30,13 +30,11 @@ export type PlaceExtras = CensusShares & {
 };
 export type ComparisonExtras = {
   byPlace: Record<string, PlaceExtras>;
-  /** Toronto CMA average rent for the user's bedroom count, October of the selected year. */
-  cityRent: { value: number; label: string; period: string } | null;
   /** Newest snapshot date of each place list. */
   asOf: Partial<Record<NearbyCategory | "park", string>>;
   sources: ExtraSource[];
 };
-export const emptyExtras: ComparisonExtras = { byPlace: {}, cityRent: null, asOf: {}, sources: [] };
+export const emptyExtras: ComparisonExtras = { byPlace: {}, asOf: {}, sources: [] };
 
 // Reviewed Census row IDs. Children are 0–14 and seniors 65+ in every year.
 type AgeRows = { population: number; total: number[]; children: number[]; seniors: number[]; percent?: boolean;
@@ -108,20 +106,6 @@ async function censusRows(catalog: Catalog, year: number, setId: string, ids: st
     visibleMinorityPct: countShare(id, rows.shares?.visibleMinorityPct),
   } satisfies CensusShares & Pick<PlaceExtras, "population" | "childrenPct" | "seniorsPct">]));
   return { values, source };
-}
-
-async function cityRent(catalog: Catalog, year: number, preferences: SearchProfile | null, signal?: AbortSignal) {
-  if (!preferences || preferences.bedrooms === "") return { rent: null, source: null };
-  const bedrooms = Number(preferences.bedrooms);
-  const [suffix, label] = bedrooms <= 0 ? ["studio", "studio"] : bedrooms === 1 ? ["1", "1 bedroom"] : bedrooms === 2 ? ["2", "2 bedrooms"] : ["3plus", "3+ bedrooms"];
-  const indicator = `cmhc-${year}-apartment-rent-${suffix}`;
-  const geography = `cmhc-toronto-${year}`;
-  const releases = catalog.sources.filter(s => s.id.startsWith(`cmhc-toronto-${year}-`));
-  if (!catalog.indicators.some(i => i.id === indicator) || !catalog.geographies.some(g => g.id === geography) || releases.length !== 1) return { rent: null, source: null };
-  const data = await getJson<{ observations: BatchRow[] }>(`/api/observations/?${new URLSearchParams({ geography_id: geography, indicator_id: indicator, source_id: releases[0].id })}`, signal);
-  const row = data.observations.filter(o => o.reference_year === year && o.period === `${year}-10`);
-  const value = row.length === 1 ? observed(row[0]) : null;
-  return { rent: value === null ? null : { value, label, period: `October ${year}` }, source: releases[0] };
 }
 
 /** Toronto Police "major crime indicators", summed per 100,000 residents. Rates share one
@@ -256,7 +240,7 @@ export async function neighbourhoodMeasures(catalog: Catalog, profiles: Neighbou
   return { byPlace, asOf, sources: [...sources.values()] };
 }
 
-export async function loadComparisonExtras(catalog: Catalog, profiles: NeighbourhoodProfile[], year: number, preferences: SearchProfile | null, signal?: AbortSignal): Promise<ComparisonExtras> {
+export async function loadComparisonExtras(catalog: Catalog, profiles: NeighbourhoodProfile[], year: number, signal?: AbortSignal): Promise<ComparisonExtras> {
   // Census values come from the geography that holds the data (an unchanged counterpart when linked).
   const dataId = (p: NeighbourhoodProfile) => p.available_years.length ? p.data_geography?.id ?? p.geography.id : null;
   const groups = new Map<string, string[]>();
@@ -267,9 +251,8 @@ export async function loadComparisonExtras(catalog: Catalog, profiles: Neighbour
   }
   // Each part fails on its own: one unavailable list must not blank the others.
   const settle = <T,>(promise: Promise<T>, fallback: T) => promise.catch(e => { if (signal?.aborted) throw e; return fallback; });
-  const [census, rent, measures, crime] = await Promise.all([
+  const [census, measures, crime] = await Promise.all([
     Promise.all([...groups].map(([set, ids]) => settle(censusRows(catalog, year, set, ids, signal), { values: {}, source: null }))),
-    settle(cityRent(catalog, year, preferences, signal), { rent: null, source: null }),
     settle(neighbourhoodMeasures(catalog, profiles, signal), { byPlace: {}, asOf: {}, sources: [] }),
     settle(safety(catalog, profiles, year, signal), { byPlace: {}, source: null }),
   ]);
@@ -283,9 +266,9 @@ export async function loadComparisonExtras(catalog: Catalog, profiles: Neighbour
       ...(crime.byPlace[g] ?? { safety: null, safetyGap: "Police crime data unavailable" }),
     } satisfies PlaceExtras];
   }));
-  const sources = [...new Map([...census.flatMap(c => c.source ? [c.source] : []), ...(rent.source ? [rent.source] : []),
+  const sources = [...new Map([...census.flatMap(c => c.source ? [c.source] : []),
     ...measures.sources, ...(crime.source ? [crime.source] : [])].map(s => [s.id, s])).values()];
-  return { byPlace, cityRent: rent.rent, asOf: measures.asOf, sources };
+  return { byPlace, asOf: measures.asOf, sources };
 }
 
 /** A place list's sub-score is its density rank in the boundary set; unranked lists give null, never 0. */

@@ -20,6 +20,7 @@ it("profile has a real submit action and working comparison navigation", () => {
   expect(html).toContain("Find my neighbourhoods");
   expect(html).toMatch(/href="\/housing\/compare\/?"/);
   expect(html).not.toContain('aria-disabled="true"');
+  expect(html).not.toMatch(/bedrooms?/i);
 });
 it("comparison navigation leads back to the map and the editable profile", () => {
   const html = renderToStaticMarkup(createElement(WorkflowHeader, { compare: true }));
