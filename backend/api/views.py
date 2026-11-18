@@ -1,5 +1,10 @@
+import json
+from datetime import date, timedelta
+
+from django.db.models.fields.json import KT
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
 from .comparison_services import Budget
 
 from .models import (
@@ -11,6 +16,8 @@ from .models import (
     SourceRelease,
     SourceTableRow,
 )
+from .agent import TeacherUnavailable, ask_teacher
+from .mcp_canada_cache import fetch_from_mcp_canada
 from .services import get_health
 
 
@@ -74,6 +81,76 @@ def observations(request):
             {**row, "value": str(row["value"]) if row["value"] is not None else None}
             for row in rows
         ],
+    })
+
+
+@require_GET
+def observations_batch(request):
+    """One indicator for every geography in a set, e.g. a Census row for all 158 neighbourhoods."""
+    filters = {
+        "geography__geography_set_id": request.GET.get("geography_set_id", "").strip(),
+        "indicator_id": request.GET.get("indicator_id", "").strip(),
+        "source_id": request.GET.get("source_id", "").strip(),
+    }
+    if not all(filters.values()):
+        return JsonResponse(
+            {"error": "Required query parameters: geography_set_id, indicator_id, source_id"},
+            status=400,
+        )
+    year = request.GET.get("reference_year", "").strip()
+    if year:
+        if not year.isdigit():
+            return JsonResponse({"error": "reference_year must be a year"}, status=400)
+        filters["reference_year"] = int(year)
+    rows = Observation.objects.filter(**filters).order_by(
+        "geography_id", "reference_year", "period", "id",
+    ).values(
+        "geography_id", "geography__name", "census_year", "reference_year",
+        "period", "value", "status", "source_locator",
+    )
+    return JsonResponse({
+        "observations": [
+            {
+                **{k: v for k, v in row.items() if k != "geography__name"},
+                "name": row["geography__name"],
+                "value": str(row["value"]) if row["value"] is not None else None,
+            }
+            for row in rows
+        ],
+    })
+
+
+@require_GET
+def places(request):
+    """Point locations of one amenity category (e.g. library) with their source.
+
+    Optional bbox=minLon,minLat,maxLon,maxLat limits the area. kind is the source's own
+    subtype where one exists (the OSM shop tag for groceries), otherwise null."""
+    category = request.GET.get("category", "").strip()
+    if not category:
+        return JsonResponse({"error": "Required query parameter: category"}, status=400)
+    places_in = Place.objects.filter(category=category)
+    if request.GET.get("bbox"):
+        try:
+            west, south, east, north = (float(x) for x in request.GET["bbox"].split(","))
+        except ValueError:
+            return JsonResponse({"error": "bbox must be minLon,minLat,maxLon,maxLat"}, status=400)
+        if not (-180 <= west <= east <= 180 and -90 <= south <= north <= 90):
+            return JsonResponse({"error": "bbox must be minLon,minLat,maxLon,maxLat"}, status=400)
+        places_in = places_in.filter(longitude__gte=west, longitude__lte=east,
+                                     latitude__gte=south, latitude__lte=north)
+    rows = places_in.order_by("name").values(
+        "name", "latitude", "longitude", "valid_on", "source_id", kind=KT("properties__tags__shop"),
+    )
+    return JsonResponse({
+        "places": [
+            {**row, "latitude": float(row["latitude"]), "longitude": float(row["longitude"]),
+             "valid_on": row["valid_on"].isoformat()}
+            for row in rows
+        ],
+        "sources": list(SourceRelease.objects.filter(
+            id__in={row["source_id"] for row in rows},
+        ).values("id", "publisher", "title", "url", "coverage")),
     })
 
 
@@ -301,3 +378,59 @@ def boundaries(request):
             for row in rows
         ],
     })
+
+
+CPI_SERIES = "V41690973"  # Total CPI, Bank of Canada Valet (same series as official-sources.json)
+
+
+@require_GET
+def mcp_canada_cpi(request):
+    """Monthly total CPI, fetched live from MCP-Canada and cached for 24 hours."""
+    start_date = request.GET.get("start_date", "2020-01-01").strip()
+    try:
+        date.fromisoformat(start_date)
+    except ValueError:
+        return JsonResponse({"error": "start_date must be YYYY-MM-DD"}, status=400)
+
+    result = fetch_from_mcp_canada(
+        "boc_get_observations",
+        {"series_names": CPI_SERIES, "start_date": start_date},
+        max_age=timedelta(hours=24),
+        refresh=request.GET.get("refresh") == "1",
+    )
+    series = (result.pop("data") or {}).get(CPI_SERIES, {})
+    result["label"] = series.get("label")
+    result["observations"] = [
+        {"period": period, "value": value}
+        for period, value in sorted(series.get("observations", {}).items())
+    ]
+    return JsonResponse(result, status=503 if result["status"] == "unavailable" else 200)
+
+
+MAX_TEACHER_CONTEXT_BYTES = 200_000
+
+
+@csrf_exempt  # JSON API with no login or cookies; the frontend posts through the Next.js proxy
+@require_POST
+def teacher_ask(request):
+    """Answer one AI-teacher question: {"question": str, "context": {title, profiles} | null}.
+
+    503 means the model is not configured or not reachable, so the frontend
+    falls back to its prepared explanations.
+    """
+    if len(request.body) > MAX_TEACHER_CONTEXT_BYTES:
+        return JsonResponse({"error": "Request is too large"}, status=413)
+    try:
+        body = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Body must be JSON"}, status=400)
+    question = body.get("question") if isinstance(body, dict) else None
+    context = body.get("context") if isinstance(body, dict) else None
+    if not isinstance(question, str) or not question.strip():
+        return JsonResponse({"error": "question is required"}, status=400)
+    if context is not None and not isinstance(context, dict):
+        return JsonResponse({"error": "context must be an object or null"}, status=400)
+    try:
+        return JsonResponse(ask_teacher(question, context))
+    except TeacherUnavailable as exc:
+        return JsonResponse({"error": str(exc)}, status=503)
