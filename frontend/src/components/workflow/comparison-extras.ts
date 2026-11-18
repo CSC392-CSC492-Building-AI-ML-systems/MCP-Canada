@@ -5,6 +5,7 @@
  * cultural spaces), and Toronto Police reported major crime for the selected year. */
 import type { Catalog } from "../explorer/data";
 import type { NeighbourhoodProfile } from "../explorer/types";
+import { commuteScore } from "@/lib/routing";
 import { LIFESTYLE_OPTIONS, type SearchProfile } from "./state";
 
 export type ExtraSource = { id: string; title: string; publisher: string; url: string };
@@ -324,13 +325,19 @@ export type MatchScore = { score: number; covers: string[] } | null;
  * Affordability: 100 at or below 75% of budget, 50 at budget, 0 at 125% or more.
  * Nearby amenities: the mean of the available density ranks of the four place lists within 1 km.
  * Safety: the share of Toronto neighbourhoods with more reported major crime per resident.
- * Lifestyle: the mean of the user's chosen priorities that have data (see lifestyleMatch). */
-export function matchScore(shelterCost: number | null, extras: PlaceExtras | undefined, preferences: SearchProfile | null): MatchScore {
+ * Lifestyle: the mean of the user's chosen priorities that have data (see lifestyleMatch).
+ * Commute and school trip: 100 at or under half the longest acceptable trip, 50 at it, 0 at 1.5 times it. */
+export function matchScore(shelterCost: number | null, extras: PlaceExtras | undefined, preferences: SearchProfile | null,
+  trips: { work?: number | null; school?: number | null } = {}): MatchScore {
   if (!preferences) return null;
   const parts: { weight: number; value: number; name: string }[] = [];
   const budget = Number(preferences.rent);
   if (shelterCost !== null && budget > 0) parts.push({ weight: preferences.weights[0] ?? 0, name: "affordability",
     value: Math.max(0, Math.min(100, (1.25 - shelterCost / budget) / 0.5 * 100)) });
+  const work = commuteScore(trips.work, preferences.trip);
+  if (work !== null) parts.push({ weight: preferences.weights[1] ?? 0, name: "commute", value: work });
+  const school = commuteScore(trips.school, preferences.trip);
+  if (school !== null) parts.push({ weight: preferences.weights[2] ?? 0, name: "school trip", value: school });
   const amenities = mean(CORE_AMENITIES.map(key => rank(extras, key)));
   if (amenities !== null) parts.push({ weight: preferences.weights[3] ?? 0, name: "amenities", value: amenities });
   if (extras?.safety) parts.push({ weight: preferences.weights[4] ?? 0, name: "safety", value: extras.safety.saferThanPct });

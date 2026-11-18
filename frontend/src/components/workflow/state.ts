@@ -3,7 +3,16 @@ export type SearchProfile = {
   version: 1; income: string; rent: string; bedrooms: string; mode: string;
   work: string; school: string; trip: number; priorities: number[]; weights: number[];
   interests: string[]; notes: string;
+  /** Coordinates of the chosen work and school addresses; absent or null when none was picked. */
+  workPoint?: GeoPoint | null; schoolPoint?: GeoPoint | null;
 };
+export type GeoPoint = { lng: number; lat: number };
+/** Destinations are accepted in the Greater Toronto Area only. */
+export function isGeoPoint(value: unknown): value is GeoPoint {
+  const p = value as GeoPoint | null;
+  return !!p && typeof p === "object" && Number.isFinite(p.lng) && Number.isFinite(p.lat)
+    && p.lat >= 43.4 && p.lat <= 44.05 && p.lng >= -79.9 && p.lng <= -78.9;
+}
 /** Lifestyle priorities; a profile stores up to three of these by index. */
 export const LIFESTYLE_OPTIONS = [
   "Family-friendly", "Transit access", "Parks & green space", "Restaurants & nightlife",
@@ -19,6 +28,7 @@ export function parseProfile(raw: string | null): SearchProfile | null {
     if (!Number.isFinite(Number(p.rent)) || Number(p.rent) <= 0 || (p.income.trim() && (!Number.isFinite(Number(p.income)) || Number(p.income) <= 0))) return null;
     if (!Number.isFinite(p.trip) || p.trip < 0 || p.trip > 120 || !Array.isArray(p.priorities) || p.priorities.length > 3 || !p.priorities.every((n: unknown) => Number.isInteger(n) && Number(n) >= 0 && Number(n) < 8)) return null;
     if (!Array.isArray(p.weights) || p.weights.length !== 6 || !p.weights.every((n: unknown) => Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 5) || !Array.isArray(p.interests) || !p.interests.every((s: unknown) => typeof s === "string")) return null;
+    if ([p.workPoint, p.schoolPoint].some(point => point != null && !isGeoPoint(point))) return null;
     return p;
   } catch { return null; }
 }

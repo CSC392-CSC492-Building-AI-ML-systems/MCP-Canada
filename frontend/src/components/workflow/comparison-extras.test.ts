@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { Catalog } from "../explorer/data";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import { lifestyleMatch, matchScore, neighbourhoodMeasures, percentRank, rankAll, rankSafety, type PlaceExtras } from "./comparison-extras";
-import type { SearchProfile } from "./state";
+import { parseProfile, type SearchProfile } from "./state";
 
 const profile: SearchProfile = { version: 1, income: "72000", rent: "1500", bedrooms: "2", mode: "Transit", work: "", school: "", trip: 30, priorities: [1], weights: [0, 0, 0, 5, 5, 0], interests: [], notes: "" };
 const noRanks = { libraries: null, schools: null, groceries: null, transitStops: null, dining: null, errands: null, childcare: null, culturalSpaces: null };
@@ -42,6 +42,23 @@ it("scores amenities as the mean of the available density ranks and safety from 
   expect(matchScore(null, empty, profile)).toBeNull();
   // Counts without ranks (e.g. no area data) are shown but never scored.
   expect(matchScore(null, { ...empty, transitStops: 500, schools: 60 }, profile)).toBeNull();
+});
+
+it("scores commute and school trips against the longest acceptable trip, skipping missing times", () => {
+  const tripsOnly = { ...profile, weights: [0, 4, 2, 0, 0, 0], trip: 30 };
+  // commute 30 min → 50; school 15 min → 100; (4 × 50 + 2 × 100) / 6 = 67
+  expect(matchScore(null, empty, tripsOnly, { work: 30, school: 15 })).toEqual({ score: 67, covers: ["commute", "school trip"] });
+  expect(matchScore(null, empty, tripsOnly, { work: null, school: 45 })).toEqual({ score: 0, covers: ["school trip"] });
+  expect(matchScore(null, empty, tripsOnly)).toBeNull();
+  expect(matchScore(null, empty, { ...tripsOnly, trip: 0 }, { work: 10 })).toBeNull();
+});
+
+it("accepts destination coordinates in the Toronto area only", () => {
+  const base = { ...profile, workPoint: { lng: -79.38, lat: 43.65 } };
+  expect(parseProfile(JSON.stringify(base))?.workPoint).toEqual({ lng: -79.38, lat: 43.65 });
+  expect(parseProfile(JSON.stringify({ ...base, schoolPoint: null }))).not.toBeNull();
+  expect(parseProfile(JSON.stringify({ ...base, workPoint: { lng: -75.7, lat: 45.4 } }))).toBeNull();
+  expect(parseProfile(JSON.stringify({ ...base, workPoint: { lng: "x", lat: 43.65 } }))).toBeNull();
 });
 
 it("scores only chosen lifestyle priorities that have data and lists the rest", () => {
