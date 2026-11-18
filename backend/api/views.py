@@ -1,8 +1,10 @@
+import json
 from datetime import date, timedelta
 
 from django.db.models.fields.json import KT
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
 from .comparison_services import Budget
 
 from .models import (
@@ -14,6 +16,7 @@ from .models import (
     SourceRelease,
     SourceTableRow,
 )
+from .agent import TeacherUnavailable, ask_teacher
 from .mcp_canada_cache import fetch_from_mcp_canada
 from .services import get_health
 
@@ -402,3 +405,32 @@ def mcp_canada_cpi(request):
         for period, value in sorted(series.get("observations", {}).items())
     ]
     return JsonResponse(result, status=503 if result["status"] == "unavailable" else 200)
+
+
+MAX_TEACHER_CONTEXT_BYTES = 200_000
+
+
+@csrf_exempt  # JSON API with no login or cookies; the frontend posts through the Next.js proxy
+@require_POST
+def teacher_ask(request):
+    """Answer one AI-teacher question: {"question": str, "context": {title, profiles} | null}.
+
+    503 means the model is not configured or not reachable, so the frontend
+    falls back to its prepared explanations.
+    """
+    if len(request.body) > MAX_TEACHER_CONTEXT_BYTES:
+        return JsonResponse({"error": "Request is too large"}, status=413)
+    try:
+        body = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Body must be JSON"}, status=400)
+    question = body.get("question") if isinstance(body, dict) else None
+    context = body.get("context") if isinstance(body, dict) else None
+    if not isinstance(question, str) or not question.strip():
+        return JsonResponse({"error": "question is required"}, status=400)
+    if context is not None and not isinstance(context, dict):
+        return JsonResponse({"error": "context must be an object or null"}, status=400)
+    try:
+        return JsonResponse(ask_teacher(question, context))
+    except TeacherUnavailable as exc:
+        return JsonResponse({"error": str(exc)}, status=503)
