@@ -21,6 +21,8 @@ from .mcp_canada_cache import fetch_from_mcp_canada
 from .services import get_health
 from . import derived_census
 from .boundary_crosswalk import boundary_links
+from .parks import ParksUnavailable, nearby_parks
+from .land_use import LandUseUnavailable, land_use
 
 
 @require_GET
@@ -167,7 +169,47 @@ def places(request):
         "sources": list(SourceRelease.objects.filter(
             id__in={row["source_id"] for row in rows},
         ).values("id", "publisher", "title", "url", "coverage")),
+        # Tells "none in this area" apart from "this list was never imported".
+        "category_loaded": Place.objects.filter(category=category).exists(),
     })
+
+
+@require_GET
+def parks_nearby(request):
+    """City parks around a point: distance to each park's edge, the closest few, how many
+    are within 1 km, and park outlines inside bbox=minLon,minLat,maxLon,maxLat."""
+    try:
+        longitude = float(request.GET.get("longitude", ""))
+        latitude = float(request.GET.get("latitude", ""))
+        west, south, east, north = (float(x) for x in request.GET.get("bbox", "").split(","))
+    except ValueError:
+        return JsonResponse({"error": "Required: longitude, latitude and bbox=minLon,minLat,maxLon,maxLat"}, status=400)
+    if not (-180 <= longitude <= 180 and -90 <= latitude <= 90 and -180 <= west <= east <= 180 and -90 <= south <= north <= 90):
+        return JsonResponse({"error": "Coordinates are out of range"}, status=400)
+    try:
+        return JsonResponse(nearby_parks(longitude, latitude, (west, south, east, north)))
+    except ParksUnavailable as exc:
+        # Not loaded is a normal state for a local database, not an error.
+        return JsonResponse({"category_loaded": False, "reason": str(exc), "within_1km": None, "nearest": [],
+                             "features": {"type": "FeatureCollection", "features": []}, "as_of": None, "source": None})
+
+
+@require_GET
+def land_use_view(request):
+    """Zoning (By-law 569-2013) inside one neighbourhood: clipped zone polygons and each
+    category's share of the neighbourhood's area. Permitted use, present day."""
+    geography_id = request.GET.get("geography_id", "").strip()
+    if not geography_id:
+        return JsonResponse({"error": "Required query parameter: geography_id"}, status=400)
+    try:
+        return JsonResponse(land_use(geography_id))
+    except LookupError as exc:
+        return JsonResponse({"error": str(exc)}, status=404)
+    except LandUseUnavailable as exc:
+        # Not loaded is a normal state for a local database, not an error.
+        return JsonResponse({"category_loaded": False, "reason": str(exc), "geography_id": geography_id,
+                             "features": {"type": "FeatureCollection", "features": []}, "shares": [],
+                             "not_covered_percent": None, "as_of": None, "source": None})
 
 
 @require_GET

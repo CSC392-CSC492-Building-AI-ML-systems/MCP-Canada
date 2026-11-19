@@ -50,3 +50,28 @@ describe("population shading preference", () => {
     expect(fresh.readShowBoundaries()).toBe(true);
   });
 });
+
+describe("amenity layer preference", () => {
+  it("starts with no layers and remembers the chosen ones", async () => {
+    vi.resetModules();
+    const fresh = await import("./mapPreferences");
+    vi.stubGlobal("window", { dispatchEvent: () => true });
+    vi.stubGlobal("localStorage", fakeStorage());
+    expect(fresh.readAmenityLayers()).toBe("");
+    fresh.writeAmenityLayers(["school", "grocery", "school"]);
+    expect(fresh.readAmenityLayers()).toBe("grocery,school");
+  });
+});
+
+describe("land use preference", () => {
+  it("is off by default and remembered when turned on", async () => {
+    vi.resetModules();
+    const fresh = await import("./mapPreferences");
+    vi.stubGlobal("window", { dispatchEvent: () => true });
+    vi.stubGlobal("localStorage", fakeStorage());
+    expect(fresh.readShowLandUse()).toBe(false);
+    fresh.writeShowLandUse(true);
+    expect(fresh.readShowLandUse()).toBe(true);
+    expect(fresh.readShowPopulation()).toBe(true);
+  });
+});
