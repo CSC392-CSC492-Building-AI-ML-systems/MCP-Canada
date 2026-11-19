@@ -300,3 +300,5 @@ prerequisites, fresh versus existing databases, and troubleshooting.
 [Import details and coverage](docs/official-data-import.md) and the
 [loaded data inventory](docs/data-import-status.md) describe the data. Run
 `backend/.venv/bin/python backend/manage.py data_inventory` to inspect the actual database.
+
+Last updated: November 2026
