@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { MAPBOX_TOKEN, TORONTO_BBOX, TORONTO_CENTER, type Place } from "@/lib/mapbox";
 import { boundsOf, type Boundaries } from "@/lib/boundaries";
+import { POPULATION_SCALE } from "@/lib/population";
 import styles from "./MapView.module.css";
 
 type Props = {
@@ -19,6 +20,10 @@ type Props = {
   // Mapbox Standard basemap options, toggled by the layer chips.
   show3dObjects?: boolean;
   showTransit?: boolean;
+  // Population per geography id; null or absent means unknown (shown as "no data").
+  shading?: Record<string, number | null> | null;
+  /** Outlines of every neighbourhood. The selected one stays highlighted either way. */
+  showBoundaries?: boolean;
   // Display-only map for the landing page: no controls, panning or zooming by the user.
   preview?: boolean;
   compact?: boolean;
@@ -33,8 +38,12 @@ const EMPTY: Boundaries = { type: "FeatureCollection", features: [] };
 const FIT = { padding: { top: 170, bottom: 60, left: 60, right: 90 }, maxZoom: 14, pitch: 45 };
 const PREVIEW_FIT = { padding: { top: 90, bottom: 50, left: 50, right: 50 }, maxZoom: 13, pitch: 50 };
 const isSelected = (id: string) => ["==", ["get", "geography_id"], id];
+const { breaks, colors, noData } = POPULATION_SCALE;
+const populationColor = ["case", ["has", "population"],
+  ["step", ["get", "population"], colors[0], ...breaks.flatMap((b, i) => [b, colors[i + 1]])],
+  noData] as mapboxgl.ExpressionSpecification;
 
-export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, preview = false, compact = false, label = "Map of Toronto", className }: Props) {
+export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, showBoundaries = true, shading, preview = false, compact = false, label = "Map of Toronto", className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -107,12 +116,26 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       // Transparent fill so a click anywhere inside a neighbourhood hits it.
       map.addLayer({ id: "neighbourhood-hit", type: "fill", source: SOURCE, slot: "middle",
         paint: { "fill-color": "#295738", "fill-opacity": 0 } });
+      // Only features marked "shaded" are coloured; without population data the map stays plain.
+      map.addLayer({ id: "population-fill", type: "fill", source: SOURCE, slot: "middle",
+        filter: ["==", ["get", "shaded"], true],
+        paint: { "fill-color": populationColor, "fill-opacity": 0.65 } });
+      // A light casing under a dark line keeps the outlines readable over the basemap,
+      // 3D buildings and the orange population shading alike. Both widen as you zoom in.
+      map.addLayer({ id: "neighbourhood-casing", type: "line", source: SOURCE, slot: "middle",
+        layout: { "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-opacity": 0.7,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 14, 5] } });
       map.addLayer({ id: "neighbourhood-outline", type: "line", source: SOURCE, slot: "middle",
-        paint: { "line-color": "#295738", "line-width": 1, "line-opacity": 0.5 } });
+        layout: { "line-join": "round" },
+        paint: { "line-color": "#1f4a2c", "line-opacity": 0.95,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 14, 2.5] } });
       map.addLayer({ id: "selected-fill", type: "fill", source: SOURCE, slot: "middle", filter: isSelected(""),
         paint: { "fill-color": "#295738", "fill-opacity": 0.25 } });
+      // Thicker than the other outlines so the selection still stands out.
       map.addLayer({ id: "selected-outline", type: "line", source: SOURCE, slot: "middle", filter: isSelected(""),
-        paint: { "line-color": "#295738", "line-width": 3 } });
+        layout: { "line-join": "round" },
+        paint: { "line-color": "#14331f", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3.5, 14, 5] } });
       map.on("click", "neighbourhood-hit", (e) => {
         const id = e.features?.[0]?.properties?.geography_id;
         if (typeof id !== "string") return;
@@ -121,10 +144,12 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       });
       const hoverLabel = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
       map.on("mousemove", "neighbourhood-hit", (e) => {
-        const name = e.features?.[0]?.properties?.name;
-        if (typeof name !== "string") return;
+        const properties = e.features?.[0]?.properties;
+        if (typeof properties?.name !== "string") return;
         map.getCanvas().style.cursor = "pointer";
-        hoverLabel.setLngLat(e.lngLat).setText(name).addTo(map);
+        const people = typeof properties.population === "number" ? `${properties.population.toLocaleString("en-CA")} people`
+          : properties.shaded ? "Population unknown" : "";
+        hoverLabel.setLngLat(e.lngLat).setText(people ? `${properties.name} · ${people}` : properties.name).addTo(map);
       });
       map.on("mouseleave", "neighbourhood-hit", () => {
         map.getCanvas().style.cursor = "";
@@ -144,9 +169,21 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
   }, [preview, compact]);
 
   useEffect(() => {
-    if (!ready) return;
-    mapRef.current?.getSource<mapboxgl.GeoJSONSource>(SOURCE)?.setData(boundaries ?? EMPTY);
-  }, [ready, boundaries]);
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    // Copy each neighbourhood's population onto its feature so the fill layer can colour it.
+    // A missing value gets no "population" property, which the layer shows as "no data".
+    const data = boundaries && shading ? {
+      ...boundaries,
+      features: boundaries.features.map((f) => {
+        const population = shading[f.properties.geography_id];
+        return { ...f, properties: { ...f.properties, shaded: true, ...(population == null ? {} : { population }) } };
+      }),
+    } : boundaries;
+    map.getSource<mapboxgl.GeoJSONSource>(SOURCE)?.setData(data ?? EMPTY);
+    // The green tint would muddy the population colours, so only the thick outline marks the selection.
+    map.setPaintProperty("selected-fill", "fill-opacity", shading ? 0 : 0.25);
+  }, [ready, boundaries, shading]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -173,6 +210,14 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     map.setConfigProperty("basemap", "show3dObjects", show3dObjects);
     map.setConfigProperty("basemap", "showTransitLabels", showTransit);
   }, [ready, show3dObjects, showTransit]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    for (const layer of ["neighbourhood-casing", "neighbourhood-outline"]) {
+      map.setLayoutProperty(layer, "visibility", showBoundaries ? "visible" : "none");
+    }
+  }, [ready, showBoundaries]);
 
   useEffect(() => {
     const map = mapRef.current;

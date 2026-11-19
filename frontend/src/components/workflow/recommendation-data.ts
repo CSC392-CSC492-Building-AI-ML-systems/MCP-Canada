@@ -6,7 +6,7 @@ export async function loadCostRows(catalog: Catalog, signal?: AbortSignal): Prom
   const releases = catalog.sources.filter(source => source.id.startsWith("census-2021-"));
   if (releases.length !== 1) throw new Error("A unique reviewed 2021 Census release is required. You can still explore and save places manually.");
   const sourceId = releases[0].id;
-  const indicatorId = "census-2021-row-380";
+  const indicatorId = "census-2021-row-381";
   const params = new URLSearchParams({ source_id: sourceId, indicator_id: indicatorId, geography_set_id: "toronto-158" });
   const batch = await fetch(`/api/observations/batch/?${params}`, { signal });
   if (batch.ok) return (await batch.json()).observations;

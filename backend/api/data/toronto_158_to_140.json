@@ -1,0 +1,638 @@
+{
+ "description": "Each City of Toronto 2021 (158) neighbourhood and the earlier (140) neighbourhood that wholly contains it. relation 'same' = unchanged boundary; 'part' = one piece of a neighbourhood split in 2021.",
+ "method": "Built by manage.py build_boundary_crosswalk from the City boundary files: every 2021 area was tested on an evenly spaced grid of interior points and required to fall at least 95% inside a single earlier area.",
+ "links": {
+  "toronto-158-1": {
+   "parent": "toronto-140-1",
+   "relation": "same"
+  },
+  "toronto-158-10": {
+   "parent": "toronto-140-10",
+   "relation": "same"
+  },
+  "toronto-158-100": {
+   "parent": "toronto-140-100",
+   "relation": "same"
+  },
+  "toronto-158-101": {
+   "parent": "toronto-140-101",
+   "relation": "same"
+  },
+  "toronto-158-102": {
+   "parent": "toronto-140-102",
+   "relation": "same"
+  },
+  "toronto-158-103": {
+   "parent": "toronto-140-103",
+   "relation": "same"
+  },
+  "toronto-158-105": {
+   "parent": "toronto-140-105",
+   "relation": "same"
+  },
+  "toronto-158-106": {
+   "parent": "toronto-140-106",
+   "relation": "same"
+  },
+  "toronto-158-107": {
+   "parent": "toronto-140-107",
+   "relation": "same"
+  },
+  "toronto-158-108": {
+   "parent": "toronto-140-108",
+   "relation": "same"
+  },
+  "toronto-158-109": {
+   "parent": "toronto-140-109",
+   "relation": "same"
+  },
+  "toronto-158-11": {
+   "parent": "toronto-140-11",
+   "relation": "same"
+  },
+  "toronto-158-110": {
+   "parent": "toronto-140-110",
+   "relation": "same"
+  },
+  "toronto-158-111": {
+   "parent": "toronto-140-111",
+   "relation": "same"
+  },
+  "toronto-158-112": {
+   "parent": "toronto-140-112",
+   "relation": "same"
+  },
+  "toronto-158-113": {
+   "parent": "toronto-140-113",
+   "relation": "same"
+  },
+  "toronto-158-114": {
+   "parent": "toronto-140-114",
+   "relation": "same"
+  },
+  "toronto-158-115": {
+   "parent": "toronto-140-115",
+   "relation": "same"
+  },
+  "toronto-158-116": {
+   "parent": "toronto-140-116",
+   "relation": "same"
+  },
+  "toronto-158-118": {
+   "parent": "toronto-140-118",
+   "relation": "same"
+  },
+  "toronto-158-119": {
+   "parent": "toronto-140-119",
+   "relation": "same"
+  },
+  "toronto-158-12": {
+   "parent": "toronto-140-12",
+   "relation": "same"
+  },
+  "toronto-158-120": {
+   "parent": "toronto-140-120",
+   "relation": "same"
+  },
+  "toronto-158-121": {
+   "parent": "toronto-140-121",
+   "relation": "same"
+  },
+  "toronto-158-122": {
+   "parent": "toronto-140-122",
+   "relation": "same"
+  },
+  "toronto-158-123": {
+   "parent": "toronto-140-123",
+   "relation": "same"
+  },
+  "toronto-158-124": {
+   "parent": "toronto-140-124",
+   "relation": "same"
+  },
+  "toronto-158-125": {
+   "parent": "toronto-140-125",
+   "relation": "same"
+  },
+  "toronto-158-126": {
+   "parent": "toronto-140-126",
+   "relation": "same"
+  },
+  "toronto-158-128": {
+   "parent": "toronto-140-128",
+   "relation": "same"
+  },
+  "toronto-158-129": {
+   "parent": "toronto-140-129",
+   "relation": "same"
+  },
+  "toronto-158-13": {
+   "parent": "toronto-140-13",
+   "relation": "same"
+  },
+  "toronto-158-130": {
+   "parent": "toronto-140-130",
+   "relation": "same"
+  },
+  "toronto-158-133": {
+   "parent": "toronto-140-133",
+   "relation": "same"
+  },
+  "toronto-158-134": {
+   "parent": "toronto-140-134",
+   "relation": "same"
+  },
+  "toronto-158-135": {
+   "parent": "toronto-140-135",
+   "relation": "same"
+  },
+  "toronto-158-136": {
+   "parent": "toronto-140-136",
+   "relation": "same"
+  },
+  "toronto-158-138": {
+   "parent": "toronto-140-138",
+   "relation": "same"
+  },
+  "toronto-158-139": {
+   "parent": "toronto-140-139",
+   "relation": "same"
+  },
+  "toronto-158-140": {
+   "parent": "toronto-140-140",
+   "relation": "same"
+  },
+  "toronto-158-141": {
+   "parent": "toronto-140-137",
+   "relation": "part"
+  },
+  "toronto-158-142": {
+   "parent": "toronto-140-137",
+   "relation": "part"
+  },
+  "toronto-158-143": {
+   "parent": "toronto-140-131",
+   "relation": "part"
+  },
+  "toronto-158-144": {
+   "parent": "toronto-140-131",
+   "relation": "part"
+  },
+  "toronto-158-145": {
+   "parent": "toronto-140-132",
+   "relation": "part"
+  },
+  "toronto-158-146": {
+   "parent": "toronto-140-132",
+   "relation": "part"
+  },
+  "toronto-158-147": {
+   "parent": "toronto-140-117",
+   "relation": "part"
+  },
+  "toronto-158-148": {
+   "parent": "toronto-140-117",
+   "relation": "part"
+  },
+  "toronto-158-149": {
+   "parent": "toronto-140-45",
+   "relation": "part"
+  },
+  "toronto-158-15": {
+   "parent": "toronto-140-15",
+   "relation": "same"
+  },
+  "toronto-158-150": {
+   "parent": "toronto-140-45",
+   "relation": "part"
+  },
+  "toronto-158-151": {
+   "parent": "toronto-140-51",
+   "relation": "part"
+  },
+  "toronto-158-152": {
+   "parent": "toronto-140-51",
+   "relation": "part"
+  },
+  "toronto-158-153": {
+   "parent": "toronto-140-51",
+   "relation": "part"
+  },
+  "toronto-158-154": {
+   "parent": "toronto-140-26",
+   "relation": "part"
+  },
+  "toronto-158-155": {
+   "parent": "toronto-140-26",
+   "relation": "part"
+  },
+  "toronto-158-156": {
+   "parent": "toronto-140-127",
+   "relation": "part"
+  },
+  "toronto-158-157": {
+   "parent": "toronto-140-127",
+   "relation": "part"
+  },
+  "toronto-158-158": {
+   "parent": "toronto-140-14",
+   "relation": "part"
+  },
+  "toronto-158-159": {
+   "parent": "toronto-140-14",
+   "relation": "part"
+  },
+  "toronto-158-16": {
+   "parent": "toronto-140-16",
+   "relation": "same"
+  },
+  "toronto-158-160": {
+   "parent": "toronto-140-17",
+   "relation": "part"
+  },
+  "toronto-158-161": {
+   "parent": "toronto-140-17",
+   "relation": "part"
+  },
+  "toronto-158-162": {
+   "parent": "toronto-140-82",
+   "relation": "part"
+  },
+  "toronto-158-163": {
+   "parent": "toronto-140-82",
+   "relation": "part"
+  },
+  "toronto-158-164": {
+   "parent": "toronto-140-77",
+   "relation": "part"
+  },
+  "toronto-158-165": {
+   "parent": "toronto-140-77",
+   "relation": "part"
+  },
+  "toronto-158-166": {
+   "parent": "toronto-140-77",
+   "relation": "part"
+  },
+  "toronto-158-167": {
+   "parent": "toronto-140-75",
+   "relation": "part"
+  },
+  "toronto-158-168": {
+   "parent": "toronto-140-75",
+   "relation": "part"
+  },
+  "toronto-158-169": {
+   "parent": "toronto-140-76",
+   "relation": "part"
+  },
+  "toronto-158-170": {
+   "parent": "toronto-140-76",
+   "relation": "part"
+  },
+  "toronto-158-171": {
+   "parent": "toronto-140-93",
+   "relation": "part"
+  },
+  "toronto-158-172": {
+   "parent": "toronto-140-93",
+   "relation": "part"
+  },
+  "toronto-158-173": {
+   "parent": "toronto-140-104",
+   "relation": "part"
+  },
+  "toronto-158-174": {
+   "parent": "toronto-140-104",
+   "relation": "part"
+  },
+  "toronto-158-18": {
+   "parent": "toronto-140-18",
+   "relation": "same"
+  },
+  "toronto-158-19": {
+   "parent": "toronto-140-19",
+   "relation": "same"
+  },
+  "toronto-158-2": {
+   "parent": "toronto-140-2",
+   "relation": "same"
+  },
+  "toronto-158-20": {
+   "parent": "toronto-140-20",
+   "relation": "same"
+  },
+  "toronto-158-21": {
+   "parent": "toronto-140-21",
+   "relation": "same"
+  },
+  "toronto-158-22": {
+   "parent": "toronto-140-22",
+   "relation": "same"
+  },
+  "toronto-158-23": {
+   "parent": "toronto-140-23",
+   "relation": "same"
+  },
+  "toronto-158-24": {
+   "parent": "toronto-140-24",
+   "relation": "same"
+  },
+  "toronto-158-25": {
+   "parent": "toronto-140-25",
+   "relation": "same"
+  },
+  "toronto-158-27": {
+   "parent": "toronto-140-27",
+   "relation": "same"
+  },
+  "toronto-158-28": {
+   "parent": "toronto-140-28",
+   "relation": "same"
+  },
+  "toronto-158-29": {
+   "parent": "toronto-140-29",
+   "relation": "same"
+  },
+  "toronto-158-3": {
+   "parent": "toronto-140-3",
+   "relation": "same"
+  },
+  "toronto-158-30": {
+   "parent": "toronto-140-30",
+   "relation": "same"
+  },
+  "toronto-158-31": {
+   "parent": "toronto-140-31",
+   "relation": "same"
+  },
+  "toronto-158-32": {
+   "parent": "toronto-140-32",
+   "relation": "same"
+  },
+  "toronto-158-33": {
+   "parent": "toronto-140-33",
+   "relation": "same"
+  },
+  "toronto-158-34": {
+   "parent": "toronto-140-34",
+   "relation": "same"
+  },
+  "toronto-158-35": {
+   "parent": "toronto-140-35",
+   "relation": "same"
+  },
+  "toronto-158-36": {
+   "parent": "toronto-140-36",
+   "relation": "same"
+  },
+  "toronto-158-37": {
+   "parent": "toronto-140-37",
+   "relation": "same"
+  },
+  "toronto-158-38": {
+   "parent": "toronto-140-38",
+   "relation": "same"
+  },
+  "toronto-158-39": {
+   "parent": "toronto-140-39",
+   "relation": "same"
+  },
+  "toronto-158-4": {
+   "parent": "toronto-140-4",
+   "relation": "same"
+  },
+  "toronto-158-40": {
+   "parent": "toronto-140-40",
+   "relation": "same"
+  },
+  "toronto-158-41": {
+   "parent": "toronto-140-41",
+   "relation": "same"
+  },
+  "toronto-158-42": {
+   "parent": "toronto-140-42",
+   "relation": "same"
+  },
+  "toronto-158-43": {
+   "parent": "toronto-140-43",
+   "relation": "same"
+  },
+  "toronto-158-44": {
+   "parent": "toronto-140-44",
+   "relation": "same"
+  },
+  "toronto-158-46": {
+   "parent": "toronto-140-46",
+   "relation": "same"
+  },
+  "toronto-158-47": {
+   "parent": "toronto-140-47",
+   "relation": "same"
+  },
+  "toronto-158-48": {
+   "parent": "toronto-140-48",
+   "relation": "same"
+  },
+  "toronto-158-49": {
+   "parent": "toronto-140-49",
+   "relation": "same"
+  },
+  "toronto-158-5": {
+   "parent": "toronto-140-5",
+   "relation": "same"
+  },
+  "toronto-158-50": {
+   "parent": "toronto-140-50",
+   "relation": "same"
+  },
+  "toronto-158-52": {
+   "parent": "toronto-140-52",
+   "relation": "same"
+  },
+  "toronto-158-53": {
+   "parent": "toronto-140-53",
+   "relation": "same"
+  },
+  "toronto-158-54": {
+   "parent": "toronto-140-54",
+   "relation": "same"
+  },
+  "toronto-158-55": {
+   "parent": "toronto-140-55",
+   "relation": "same"
+  },
+  "toronto-158-56": {
+   "parent": "toronto-140-56",
+   "relation": "same"
+  },
+  "toronto-158-57": {
+   "parent": "toronto-140-57",
+   "relation": "same"
+  },
+  "toronto-158-58": {
+   "parent": "toronto-140-58",
+   "relation": "same"
+  },
+  "toronto-158-59": {
+   "parent": "toronto-140-59",
+   "relation": "same"
+  },
+  "toronto-158-6": {
+   "parent": "toronto-140-6",
+   "relation": "same"
+  },
+  "toronto-158-60": {
+   "parent": "toronto-140-60",
+   "relation": "same"
+  },
+  "toronto-158-61": {
+   "parent": "toronto-140-61",
+   "relation": "same"
+  },
+  "toronto-158-62": {
+   "parent": "toronto-140-62",
+   "relation": "same"
+  },
+  "toronto-158-63": {
+   "parent": "toronto-140-63",
+   "relation": "same"
+  },
+  "toronto-158-64": {
+   "parent": "toronto-140-64",
+   "relation": "same"
+  },
+  "toronto-158-65": {
+   "parent": "toronto-140-65",
+   "relation": "same"
+  },
+  "toronto-158-66": {
+   "parent": "toronto-140-66",
+   "relation": "same"
+  },
+  "toronto-158-67": {
+   "parent": "toronto-140-67",
+   "relation": "same"
+  },
+  "toronto-158-68": {
+   "parent": "toronto-140-68",
+   "relation": "same"
+  },
+  "toronto-158-69": {
+   "parent": "toronto-140-69",
+   "relation": "same"
+  },
+  "toronto-158-7": {
+   "parent": "toronto-140-7",
+   "relation": "same"
+  },
+  "toronto-158-70": {
+   "parent": "toronto-140-70",
+   "relation": "same"
+  },
+  "toronto-158-71": {
+   "parent": "toronto-140-71",
+   "relation": "same"
+  },
+  "toronto-158-72": {
+   "parent": "toronto-140-72",
+   "relation": "same"
+  },
+  "toronto-158-73": {
+   "parent": "toronto-140-73",
+   "relation": "same"
+  },
+  "toronto-158-74": {
+   "parent": "toronto-140-74",
+   "relation": "same"
+  },
+  "toronto-158-78": {
+   "parent": "toronto-140-78",
+   "relation": "same"
+  },
+  "toronto-158-79": {
+   "parent": "toronto-140-79",
+   "relation": "same"
+  },
+  "toronto-158-8": {
+   "parent": "toronto-140-8",
+   "relation": "same"
+  },
+  "toronto-158-80": {
+   "parent": "toronto-140-80",
+   "relation": "same"
+  },
+  "toronto-158-81": {
+   "parent": "toronto-140-81",
+   "relation": "same"
+  },
+  "toronto-158-83": {
+   "parent": "toronto-140-83",
+   "relation": "same"
+  },
+  "toronto-158-84": {
+   "parent": "toronto-140-84",
+   "relation": "same"
+  },
+  "toronto-158-85": {
+   "parent": "toronto-140-85",
+   "relation": "same"
+  },
+  "toronto-158-86": {
+   "parent": "toronto-140-86",
+   "relation": "same"
+  },
+  "toronto-158-87": {
+   "parent": "toronto-140-87",
+   "relation": "same"
+  },
+  "toronto-158-88": {
+   "parent": "toronto-140-88",
+   "relation": "same"
+  },
+  "toronto-158-89": {
+   "parent": "toronto-140-89",
+   "relation": "same"
+  },
+  "toronto-158-9": {
+   "parent": "toronto-140-9",
+   "relation": "same"
+  },
+  "toronto-158-90": {
+   "parent": "toronto-140-90",
+   "relation": "same"
+  },
+  "toronto-158-91": {
+   "parent": "toronto-140-91",
+   "relation": "same"
+  },
+  "toronto-158-92": {
+   "parent": "toronto-140-92",
+   "relation": "same"
+  },
+  "toronto-158-94": {
+   "parent": "toronto-140-94",
+   "relation": "same"
+  },
+  "toronto-158-95": {
+   "parent": "toronto-140-95",
+   "relation": "same"
+  },
+  "toronto-158-96": {
+   "parent": "toronto-140-96",
+   "relation": "same"
+  },
+  "toronto-158-97": {
+   "parent": "toronto-140-97",
+   "relation": "same"
+  },
+  "toronto-158-98": {
+   "parent": "toronto-140-98",
+   "relation": "same"
+  },
+  "toronto-158-99": {
+   "parent": "toronto-140-99",
+   "relation": "same"
+  }
+ }
+}
