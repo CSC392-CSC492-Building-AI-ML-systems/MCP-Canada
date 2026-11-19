@@ -120,12 +120,22 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       map.addLayer({ id: "population-fill", type: "fill", source: SOURCE, slot: "middle",
         filter: ["==", ["get", "shaded"], true],
         paint: { "fill-color": populationColor, "fill-opacity": 0.65 } });
+      // A light casing under a dark line keeps the outlines readable over the basemap,
+      // 3D buildings and the orange population shading alike. Both widen as you zoom in.
+      map.addLayer({ id: "neighbourhood-casing", type: "line", source: SOURCE, slot: "middle",
+        layout: { "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-opacity": 0.7,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 14, 5] } });
       map.addLayer({ id: "neighbourhood-outline", type: "line", source: SOURCE, slot: "middle",
-        paint: { "line-color": "#295738", "line-width": 1, "line-opacity": 0.5 } });
+        layout: { "line-join": "round" },
+        paint: { "line-color": "#1f4a2c", "line-opacity": 0.95,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 14, 2.5] } });
       map.addLayer({ id: "selected-fill", type: "fill", source: SOURCE, slot: "middle", filter: isSelected(""),
         paint: { "fill-color": "#295738", "fill-opacity": 0.25 } });
+      // Thicker than the other outlines so the selection still stands out.
       map.addLayer({ id: "selected-outline", type: "line", source: SOURCE, slot: "middle", filter: isSelected(""),
-        paint: { "line-color": "#295738", "line-width": 3 } });
+        layout: { "line-join": "round" },
+        paint: { "line-color": "#14331f", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3.5, 14, 5] } });
       map.on("click", "neighbourhood-hit", (e) => {
         const id = e.features?.[0]?.properties?.geography_id;
         if (typeof id !== "string") return;
@@ -204,7 +214,9 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    map.setLayoutProperty("neighbourhood-outline", "visibility", showBoundaries ? "visible" : "none");
+    for (const layer of ["neighbourhood-casing", "neighbourhood-outline"]) {
+      map.setLayoutProperty(layer, "visibility", showBoundaries ? "visible" : "none");
+    }
   }, [ready, showBoundaries]);
 
   useEffect(() => {
