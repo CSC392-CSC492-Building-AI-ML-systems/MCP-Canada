@@ -22,6 +22,8 @@ type Props = {
   showTransit?: boolean;
   // Population per geography id; null or absent means unknown (shown as "no data").
   shading?: Record<string, number | null> | null;
+  /** Outlines of every neighbourhood. The selected one stays highlighted either way. */
+  showBoundaries?: boolean;
   // Display-only map for the landing page: no controls, panning or zooming by the user.
   preview?: boolean;
   compact?: boolean;
@@ -41,7 +43,7 @@ const populationColor = ["case", ["has", "population"],
   ["step", ["get", "population"], colors[0], ...breaks.flatMap((b, i) => [b, colors[i + 1]])],
   noData] as mapboxgl.ExpressionSpecification;
 
-export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, shading, preview = false, compact = false, label = "Map of Toronto", className }: Props) {
+export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, showBoundaries = true, shading, preview = false, compact = false, label = "Map of Toronto", className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -198,6 +200,12 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
     map.setConfigProperty("basemap", "show3dObjects", show3dObjects);
     map.setConfigProperty("basemap", "showTransitLabels", showTransit);
   }, [ready, show3dObjects, showTransit]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    map.setLayoutProperty("neighbourhood-outline", "visibility", showBoundaries ? "visible" : "none");
+  }, [ready, showBoundaries]);
 
   useEffect(() => {
     const map = mapRef.current;

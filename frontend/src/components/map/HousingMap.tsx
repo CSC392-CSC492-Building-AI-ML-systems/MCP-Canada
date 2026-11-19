@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import LocationSearch from "./LocationSearch";
 import MapView from "./MapView";
 import type { ExplorationSelection } from "@/components/explorer/types";
 import { findBoundary, loadBoundaries, type Boundaries } from "@/lib/boundaries";
 import { MAPBOX_TOKEN, placeFromSearch, type Place } from "@/lib/mapbox";
 import { loadPopulation, POPULATION_SCALE, type PopulationLayer } from "@/lib/population";
+import { readShowBoundaries, subscribeMapPreferences, writeShowBoundaries } from "@/lib/mapPreferences";
 import styles from "./HousingMap.module.css";
 
 const OUTSIDE_NOTICE = "This location is outside the loaded neighbourhood boundaries, so the selection did not change.";
@@ -36,6 +37,8 @@ export default function HousingMap({ selection, onSelectionChange }: {
   const boundaries = loaded && loaded.setId === selection?.boundarySetId ? loaded.data : null;
   const [show3d, setShow3d] = useState(true);
   const [showTransit, setShowTransit] = useState(true);
+  // Remembered per browser; the server render always starts with outlines shown.
+  const showBoundaries = useSyncExternalStore(subscribeMapPreferences, readShowBoundaries, () => true);
   const selectedName = boundaries?.features.find((f) => f.properties.geography_id === selection?.geographyId)?.properties.name;
   const localOptions = useMemo(() => boundaries?.features.map((f) => ({
     id: f.properties.geography_id, name: f.properties.name, detail: `Toronto neighbourhood ${f.properties.code}`,
@@ -85,7 +88,7 @@ export default function HousingMap({ selection, onSelectionChange }: {
     <MapView selected={selected?.place ?? null} boundaries={boundaries} selectedGeographyId={selection?.geographyId}
       onGeographyClick={(geographyId) => { if (selection) onSelectionChange({ ...selection, geographyId }); }}
       onPlaceDismiss={() => { setSelected(null); setNotice(""); }}
-      show3dObjects={show3d} showTransit={showTransit} shading={current?.layer?.values} className={styles.map} />
+      show3dObjects={show3d} showTransit={showTransit} showBoundaries={showBoundaries} shading={current?.layer?.values} className={styles.map} />
     <div className={styles.topRow}>
       <div className={styles.overlayColumn}>
         <div className={styles.headerCard}>
@@ -93,6 +96,7 @@ export default function HousingMap({ selection, onSelectionChange }: {
           <p>Drag to pan · right-drag to rotate · scroll to zoom</p>
         </div>
         <div className={styles.chips} role="group" aria-label="Map layers">
+          <button type="button" aria-pressed={showBoundaries} onClick={() => writeShowBoundaries(!showBoundaries)} title="Show or hide the outlines of all neighbourhoods. The selected neighbourhood stays highlighted.">Boundaries</button>
           <button type="button" aria-pressed={show3d} onClick={() => setShow3d((v) => !v)}>3D buildings</button>
           <button type="button" aria-pressed={showTransit} onClick={() => setShowTransit((v) => !v)}>Transit</button>
           {/* No verified data yet; shown so the gap is visible rather than hidden. */}
