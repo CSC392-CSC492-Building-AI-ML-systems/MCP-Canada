@@ -34,8 +34,11 @@ WEIGHTS = {
 
 
 def applies(geography_set_id: str, source_id: str) -> bool:
-    """True for a 2021 Census request on the earlier boundaries, which has no published rows."""
-    return geography_set_id == OLD_SET and source_id.startswith("census-2021-")
+    """True for a 2021 Census request on the earlier boundaries, which has no published rows.
+
+    Covers both 2021 releases: the City CSV import (census-2021-...) and the copy
+    loaded from MCP-Canada (mcp-canada-census-2021)."""
+    return geography_set_id == OLD_SET and (source_id.startswith("census-2021-") or source_id == "mcp-canada-census-2021")
 
 
 def _number(value: Decimal) -> str:

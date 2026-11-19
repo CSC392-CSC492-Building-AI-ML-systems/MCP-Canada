@@ -145,6 +145,13 @@ class DerivedCensusTests(TestCase):
         }).json()
         self.assertEqual(empty["observations"], [])
 
+    def test_applies_only_to_2021_releases_on_the_earlier_boundaries(self):
+        self.assertTrue(derived_census.applies("toronto-140", "census-2021-xlsx-abc"))
+        self.assertTrue(derived_census.applies("toronto-140", "mcp-canada-census-2021"))
+        self.assertFalse(derived_census.applies("toronto-158", "census-2021-xlsx-abc"))
+        self.assertFalse(derived_census.applies("toronto-140", "census-2016-csv-abc"))
+        self.assertFalse(derived_census.applies("toronto-140", "mcp-canada-census-2016"))
+
     def test_catalog_lists_boundary_links(self):
         links = self.client.get("/api/catalog/").json()["boundary_links"]
         self.assertIn({"id": "toronto-158-2", "parent": "toronto-140-2", "relation": "part"}, links)
