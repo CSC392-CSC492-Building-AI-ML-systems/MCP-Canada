@@ -12,9 +12,9 @@ const historyOptions = ['Community stories', 'Transport & growth', 'Buildings & 
 const factors = ['Affordability', 'Commute to work', 'School distance', 'Nearby amenities', 'Safety', 'Lifestyle match'];
 const modes = ['Transit', 'Walk', 'Bike', 'Drive'];
 const samples = [
-  { name: 'The Wilsons · newcomer family', income: '96000', rent: '2800', bedrooms: '3', trip: 45, priorities: [0, 2, 7], weights: [5, 4, 5, 3, 4, 4] },
-  { name: 'Raya · new graduate', income: '58000', rent: '1750', bedrooms: '1', trip: 35, priorities: [1, 3, 6], weights: [5, 5, 0, 4, 3, 4] },
-  { name: 'Lisa · single parent', income: '72000', rent: '2400', bedrooms: '2', trip: 30, priorities: [0, 4, 7], weights: [5, 4, 5, 2, 5, 3] },
+  { name: 'The Wilsons · newcomer family', income: '96000', rent: '2800', trip: 45, priorities: [0, 2, 7], weights: [5, 4, 5, 3, 4, 4] },
+  { name: 'Raya · new graduate', income: '58000', rent: '1750', trip: 35, priorities: [1, 3, 6], weights: [5, 5, 0, 4, 3, 4] },
+  { name: 'Lisa · single parent', income: '72000', rent: '2400', trip: 30, priorities: [0, 4, 7], weights: [5, 4, 5, 2, 5, 3] },
 ];
 const money = new Intl.NumberFormat('en-CA', {
   style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
@@ -29,7 +29,6 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
   const [sample, setSample] = useState('');
   const [income, setIncome] = useState(initial?.income ?? '');
   const [rent, setRent] = useState(initial?.rent ?? '');
-  const [bedrooms, setBedrooms] = useState(initial?.bedrooms ?? '');
   const [mode, setMode] = useState(initial?.mode ?? 'Transit');
   const [work, setWork] = useState(initial?.work ?? '');
   const [school, setSchool] = useState(initial?.school ?? '');
@@ -47,7 +46,6 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
     setSample(profile.name);
     setIncome(profile.income);
     setRent(profile.rent);
-    setBedrooms(profile.bedrooms);
     setTrip(profile.trip);
     setPriorities(profile.priorities);
     setWeights(profile.weights);
@@ -78,7 +76,7 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
         <div className={styles.profileTools}><Link href="/housing/personalize/">← Back to choices</Link><button type="button" onClick={() => { clearProfile(); router.refresh(); }}>Clear saved profile</button></div>
         <form onChange={() => { setSample(''); setSubmitted(false); }} onSubmit={event => {
           event.preventDefault();
-          const profile: SearchProfile = { version: 1, income, rent, bedrooms, mode, work, school, trip, priorities, weights, interests, notes, workPoint, schoolPoint };
+          const profile: SearchProfile = { version: 1, income, rent, mode, work, school, trip, priorities, weights, interests, notes, workPoint, schoolPoint };
           if (!parseProfile(JSON.stringify(profile))) { setSubmitted(true); return; }
           writeSession(PROFILE_KEY, JSON.stringify(profile));
           writeSession(RECOMMENDED_KEY, "[]");
@@ -104,16 +102,6 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
               <div className={styles.pair}>
                 <label>Max monthly rent
                   <input type="number" min="1" step="any" required value={rent} placeholder="2,400" onChange={e => setRent(e.target.value)} />
-                </label>
-                <label>Bedrooms needed
-                  <select required value={bedrooms} onChange={e => setBedrooms(e.target.value)}>
-                    <option value="">Select</option>
-                    <option value="0">Studio</option>
-                    <option value="1">1 bedroom</option>
-                    <option value="2">2 bedrooms</option>
-                    <option value="3">3 bedrooms</option>
-                    <option value="4">4+ bedrooms</option>
-                  </select>
                 </label>
               </div>
               <div className={styles.context} aria-live="polite">
@@ -204,7 +192,7 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
 
           <section className={styles.actions} aria-labelledby="profile-actions">
             <div><h2 id="profile-actions">Ready to explore places that fit you?</h2>
-              <p>Find up to five starting points using published 2021 Census housing costs. Travel times to your work and school addresses appear when you compare places. Bedrooms and history matching are not connected yet; these preferences are saved for later.</p></div>
+              <p>Find up to five starting points using published 2021 Census housing costs. Travel times to your work and school addresses appear when you compare places. History matching is not connected yet; this preference is saved for later.</p></div>
             <button type="submit">Find my neighbourhoods →</button>
           </section>
           <div className={styles.result} aria-live="polite">

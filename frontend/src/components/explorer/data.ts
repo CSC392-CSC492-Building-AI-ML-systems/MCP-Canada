@@ -106,7 +106,7 @@ export async function loadProfile(catalog: Catalog, geographyId: string, year: n
     year,available_years:years,metrics:{cost,income,burden},history,
     method:{
       release_selection:'Each indicator uses the single reviewed Census release present in the catalogue. Multiple releases are treated as unavailable until a release is selected explicitly.',
-      housing:'Census renter shelter costs include rent and applicable utilities. They are not advertised asking rents and are not bedroom-specific.',
+      housing:'Census renter shelter costs include rent and applicable utilities. They are not advertised asking rents.',
       comparison:'One boundary set is retained across the timeline. Unavailable years are never filled or mapped from another boundary set.',
       income:'Published household income is contextual. Personal affordability uses only the income you enter.',
       inflation:'All dollar values shown here are nominal (not inflation-adjusted).',
