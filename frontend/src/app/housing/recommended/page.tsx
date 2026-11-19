@@ -23,7 +23,7 @@ export default function RecommendedMapPage() {
       const places = budgetStartingPoints(rows, profile);
       if (abort.signal.aborted) return;
       writeSession(RECOMMENDED_KEY, JSON.stringify(places));
-      setResult({ places, notice: profile.weights[0] === 0 ? "Affordability has zero weight. Enable it in your profile to find budget-based starting points; other matching factors are unavailable." : "Starting points within your budget, ordered by lowest published 2021 shelter cost. If none fit, the lowest available benchmarks are marked above budget. These are Census benchmarks, not current listings or bedroom-specific rents. Commute, lifestyle, safety and overall match scores are unavailable." });
+      setResult({ places, notice: profile.weights[0] === 0 ? "Affordability has zero weight. Enable it in your profile to find budget-based starting points; other matching factors are unavailable." : "Starting points within your budget, ordered by lowest published 2021 shelter cost. If none fit, the lowest available benchmarks are marked above budget. These are Census benchmarks, not current listings or advertised rents. Commute, lifestyle, safety and overall match scores are unavailable." });
       setError("");
     }
     load().catch(e => { if (!abort.signal.aborted) setError(e.message); });

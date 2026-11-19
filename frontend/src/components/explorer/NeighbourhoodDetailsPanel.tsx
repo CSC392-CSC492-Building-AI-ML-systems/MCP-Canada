@@ -55,7 +55,7 @@ export function NeighbourhoodDetailsPanel({ profile, income, budget, onIncomeCha
           <div><dt>Median household income<SourceNote measurement={householdIncome} /></dt><dd>{display(householdIncome)}<small>/ year</small></dd></div>
           <div><dt>{burden.unit === "households" ? "Households spending ≥30% on rent" : "Renters spending ≥30% on shelter"}<SourceNote measurement={burden} /></dt><dd>{display(burden)}</dd></div>
         </dl>
-        <p className={styles.caption}>Shelter costs include applicable utilities. This is a Census benchmark across rented dwellings, not a bedroom-specific or advertised rent.</p>
+        <p className={styles.caption}>Shelter costs include applicable utilities. This is a Census benchmark across rented dwellings, not an advertised rent.</p>
       </section>
       <section className={styles.budgetBox} aria-labelledby="budget-title"><h2 id="budget-title">Try your own budget</h2><p className={styles.caption}>Before-tax household income · stays in this page</p>
         <label htmlFor="annual-income">Annual household income ($)<input id="annual-income" type="number" min="1" step="any" inputMode="decimal" placeholder="e.g. 72000" value={income} aria-invalid={!!result.incomeError} aria-describedby={result.incomeError ? 'income-error' : undefined} onChange={e => onIncomeChange(e.target.value)} /></label>
