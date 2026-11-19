@@ -185,5 +185,15 @@
     "attribution": "Contains information licensed under the Open Government Licence – Toronto.",
     "licence_conditions": "Redistribution allowed with attribution and, where possible, a link to the licence; no share-alike. Excludes personal information, third-party rights the City cannot license, and City names, crests and logos.",
     "licence_checked": "2026-11-16: open.toronto.ca dataset page links the City open data licence"
+  },
+  "zoning-areas.geojson": {
+    "url": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/34927e44-fc11-4336-a8aa-a0dfb27658b7/resource/d75fa1ed-cd04-4a0b-bb6d-2b928ffffa6e/download/Zoning%20Area%20-%204326.geojson",
+    "retrieved_at": "2026-11-19T19:47:44+00:00",
+    "sha256": "2e87ee0f66e9dbe6617097a8151739d7f40e6cbf3eeed5e1c5a2e5a62d98ff7d",
+    "licence": "Open Government Licence – Toronto 1.0 (CKAN license_title: open-government-licence-toronto)",
+    "licence_url": "https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-licence/",
+    "attribution": "Contains information licensed under the Open Government Licence – Toronto.",
+    "licence_checked": "2026-11-19: open.toronto.ca/dataset/zoning-by-law CKAN record",
+    "note": "Zoning By-law 569-2013 'Zoning Area' layer (11,719 zones; amendments to June 18, 2023). Shows what land is zoned for, not what is built; lands still under former municipal by-laws are not in this file. No release mirror yet: if the City republishes different bytes, upload this pinned snapshot to the project data release and add it as 'mirror'."
   }
 }

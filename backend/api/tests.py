@@ -433,6 +433,12 @@ class ComparisonDataTests(TestCase):
         for bad in ['1,2,3', '-79,44,-80,43', 'a,b,c,d']:
             self.assertEqual(self.client.get('/api/places/', {'category': 'grocery', 'bbox': bad}).status_code, 400)
 
+    def test_places_tell_an_empty_area_from_a_list_never_imported(self):
+        empty_area = self.client.get('/api/places/', {'category': 'library', 'bbox': '-79.5,43.5,-79.45,43.55'}).json()
+        self.assertEqual((empty_area['places'], empty_area['category_loaded']), ([], True))
+        never_loaded = self.client.get('/api/places/', {'category': 'childcare'}).json()
+        self.assertEqual((never_loaded['places'], never_loaded['category_loaded']), ([], False))
+
     def test_places_filters_category_and_lists_source(self):
         data = self.client.get('/api/places/', {'category': 'library'}).json()
         self.assertEqual([(p['name'], p['latitude']) for p in data['places']], [('Test branch', 43.6)])

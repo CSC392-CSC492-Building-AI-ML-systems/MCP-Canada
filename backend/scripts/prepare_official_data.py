@@ -467,6 +467,16 @@ def build(raw_dir, manifest, census_only=False):
             note='Derived from source polygons on a local km projection; current snapshot applied to this boundary model'
             observe(sid,gid,'green-parks-within-1km',int(date[:4]),date,str(count),f'derived:{gid};classes=park',notes=note)
             observe(sid,gid,'green-space-share',int(date[:4]),date,str(Decimal(pct).quantize(Decimal('0.0001'))),f'derived:{gid};classes=share',notes=note)
+    # City zoning (By-law 569-2013): what land is zoned for, not what is built; current snapshot.
+    # Staged as source polygons; the land-use map layer and neighbourhood shares are derived on request.
+    if (raw_dir/'zoning-areas.geojson').exists():
+        filename='zoning-areas.geojson'
+        sid=source(filename,'City of Toronto','Zoning By-law 569-2013 zoning areas',
+            'City-wide zone categories with amendments to June 18, 2023; permitted use, not actual use; current snapshot, not historical',
+            notes='Lands still under former municipal by-laws are not in this file')
+        for f in json.loads((raw_dir/filename).read_text(encoding='utf-8'))['features']:
+            p=f['properties']
+            staged(sid,f'feature/{p["_id"]}',p.get('ZN_STRING') or '',dict(properties=p,geometry=f['geometry']),dict(comparison_ready=False))
     # Library feature geometries and original attributes.
     if (raw_dir/'libraries.geojson').exists():
         sid=source('libraries.geojson','Toronto Public Library / City of Toronto','Library branch general information','Toronto library branches; source snapshot, not historical amenity presence')
