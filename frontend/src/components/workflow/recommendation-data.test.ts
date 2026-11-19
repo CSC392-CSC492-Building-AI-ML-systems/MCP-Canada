@@ -15,7 +15,7 @@ it("uses existing observations when the optional batch endpoint is absent", asyn
   const url = new URL(fetcher.mock.calls[1][0], "http://localhost");
   expect(url.pathname).toBe("/api/observations/");
   expect(url.searchParams.get("source_id")).toBe("census-2021-reviewed");
-  expect(url.searchParams.get("indicator_id")).toBe("census-2021-row-380");
+  expect(url.searchParams.get("indicator_id")).toBe("census-2021-row-381");
 });
 it("does not turn ambiguous observations into recommendation data", async () => {
   const duplicate = { census_year: 2021, period: "annual", value: "1200", status: "observed", source_locator: "fixture" };

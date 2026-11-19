@@ -51,7 +51,7 @@ export function NeighbourhoodDetailsPanel({ profile, income, budget, onIncomeCha
         <div className={styles.sectionHeading}><h2 id="housing-title">Housing &amp; affordability</h2><span className={styles.smallPill}>{profile.year}</span></div>
         <p className={styles.caption}>Published neighbourhood data · nominal dollars</p>
         <dl className={styles.measurements}>
-          <div><dt>{cost.statistic === "average" ? "Average gross rent" : "Median renter shelter cost"}<SourceNote measurement={cost} /></dt><dd>{display(cost)}<small>/ month</small></dd></div>
+          <div><dt>{cost.statistic === "median" ? "Median renter shelter cost" : profile.year < 2011 ? "Average gross rent" : "Average renter shelter cost"}<SourceNote measurement={cost} /></dt><dd>{display(cost)}<small>/ month</small></dd></div>
           <div><dt>Median household income<SourceNote measurement={householdIncome} /></dt><dd>{display(householdIncome)}<small>/ year</small></dd></div>
           <div><dt>{burden.unit === "households" ? "Households spending ≥30% on rent" : "Renters spending ≥30% on shelter"}<SourceNote measurement={burden} /></dt><dd>{display(burden)}</dd></div>
         </dl>
@@ -66,9 +66,9 @@ export function NeighbourhoodDetailsPanel({ profile, income, budget, onIncomeCha
         <p className={styles.caption}>{result.meetsGuideline === null ? 'Enter income to compare the published housing cost with the 30% guideline.' : result.meetsGuideline ? 'The selected benchmark is at or below 30% of your entered income.' : 'The selected benchmark exceeds 30% of your entered income.'} This is a budget illustration, not the published housing-burden rate above.</p>
         {costValue !== null && result.incomeShare !== null && <p className={styles.caption}>You are comparing a {profile.year} cost with the income you enter. Use a matching income period for a historical budget check.</p>}
       </section>
-      <section className={styles.panelSection} aria-labelledby="history-title"><h2 id="history-title">Housing through time</h2><p className={styles.caption}>Same {historical ? '140' : '158'} boundary set · no filled gaps</p>
+      <section className={styles.panelSection} aria-labelledby="history-title"><h2 id="history-title">Housing through time</h2><p className={styles.caption}>Same neighbourhood boundary in every year · no filled gaps</p>
         <div className={styles.historyBars}>{profile.history.map(h => { const value = measuredNumber(h.cost); return <div key={h.year} aria-label={`${h.year}: ${value === null ? 'unavailable' : money(value)}`}><span>{h.year}</span><span className={styles.historyTrack}>{value !== null && <span style={{ width: `${value / historyMax * 100}%` }} />}</span><strong>{value === null ? '—' : money(value)}</strong></div>; })}</div>
-        <p className={styles.caption}>Earlier records use average gross rent; 2011 and 2021 use median renter shelter costs. No change percentage is calculated across different definitions or boundaries.</p>
+        <p className={styles.caption}>Average renter shelter cost in every year (called gross rent in 2001 and 2006); the 2016 neighbourhood profile does not publish it. Dollars are nominal. Use “Compare this location across time” to see the change.</p>{profile.boundary_note && <p className={styles.caption}>{profile.boundary_note}</p>}
       </section>
       <section className={styles.panelSection}><h2>Sources and method</h2><p className={styles.verifiedTag}>PUBLISHED DATA · SOURCE YEARS SHOWN</p>
         {sources.map(source => <div className={styles.sourceItem} key={source.id}><a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a><p>{source.publisher}</p><p>{source.coverage}</p></div>)}

@@ -110,7 +110,8 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = NO_RECOMME
       const match = findAtSameLocation(source, selection.geographyId, target)?.properties.geography_id;
       if (match && set.neighbourhoods.some(n => n.id === match)) geographyId = match;
     } catch { if (abort.signal.aborted) return; }
-    setSelection({ boundarySetId: set.id, geographyId, year: set.years.at(-1)! });
+    // Both sets share the same Census years now, so keep the year the person was looking at.
+    setSelection({ boundarySetId: set.id, geographyId, year: set.years.includes(selection.year) ? selection.year : set.years.at(-1)! });
   }
   useEffect(() => {
     setContext(profile ? { profiles: [profile], title: `${profile.geography.name} · ${profile.year} Census` } : null);
