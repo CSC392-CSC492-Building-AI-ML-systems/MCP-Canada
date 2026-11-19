@@ -1,22 +1,30 @@
 /** Per-viewer map display choices, remembered in this browser only. Storage can be
- * blocked (private windows, previews), so the choice then lasts for this visit. */
+ * blocked (private windows, previews), so a choice then lasts for this visit. */
 export const SHOW_BOUNDARIES_KEY = "mcp-canada-show-boundaries";
+export const SHOW_POPULATION_KEY = "mcp-canada-show-population";
 const CHANGE_EVENT = "map-preferences-change";
-let memory: boolean | null = null;
+const memory = new Map<string, boolean>();
 
-/** Neighbourhood outlines are shown unless this viewer turned them off. */
-export function readShowBoundaries(): boolean {
+/** On unless this viewer turned it off. */
+function read(key: string): boolean {
   try {
-    const stored = localStorage.getItem(SHOW_BOUNDARIES_KEY);
-    return stored === null ? memory ?? true : stored !== "false";
-  } catch { return memory ?? true; }
+    const stored = localStorage.getItem(key);
+    return stored === null ? memory.get(key) ?? true : stored !== "false";
+  } catch { return memory.get(key) ?? true; }
 }
 
-export function writeShowBoundaries(show: boolean) {
-  memory = show;
-  try { localStorage.setItem(SHOW_BOUNDARIES_KEY, String(show)); } catch { /* Kept in memory for this visit. */ }
+function write(key: string, show: boolean) {
+  memory.set(key, show);
+  try { localStorage.setItem(key, String(show)); } catch { /* Kept in memory for this visit. */ }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
+
+/** Outlines of every neighbourhood. */
+export const readShowBoundaries = () => read(SHOW_BOUNDARIES_KEY);
+export const writeShowBoundaries = (show: boolean) => write(SHOW_BOUNDARIES_KEY, show);
+/** Population shading and its legend. */
+export const readShowPopulation = () => read(SHOW_POPULATION_KEY);
+export const writeShowPopulation = (show: boolean) => write(SHOW_POPULATION_KEY, show);
 
 export function subscribeMapPreferences(callback: () => void) {
   window.addEventListener(CHANGE_EVENT, callback);

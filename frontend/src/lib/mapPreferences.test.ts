@@ -35,3 +35,18 @@ describe("boundary outline preference", () => {
     expect(fresh.readShowBoundaries()).toBe(false);
   });
 });
+
+describe("population shading preference", () => {
+  it("is on by default and independent of the boundary outlines", async () => {
+    vi.resetModules();
+    const fresh = await import("./mapPreferences");
+    vi.stubGlobal("window", { dispatchEvent: () => true });
+    const storage = fakeStorage();
+    vi.stubGlobal("localStorage", storage);
+    expect(fresh.readShowPopulation()).toBe(true);
+    fresh.writeShowPopulation(false);
+    expect(storage.store.get(fresh.SHOW_POPULATION_KEY)).toBe("false");
+    expect(fresh.readShowPopulation()).toBe(false);
+    expect(fresh.readShowBoundaries()).toBe(true);
+  });
+});
