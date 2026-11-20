@@ -4,6 +4,7 @@
  * dining, everyday services, child care, cultural spaces), and Toronto Police reported
  * major crime for the selected year. */
 import type { Catalog } from "../explorer/data";
+import { censusSources } from "../explorer/censusSource";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import { LIFESTYLE_OPTIONS, type SearchProfile } from "./state";
 
@@ -66,7 +67,7 @@ const observed = (row?: BatchRow) => row && row.status === "observed" && row.val
 
 async function censusRows(catalog: Catalog, year: number, setId: string, ids: string[], signal?: AbortSignal) {
   const rows = ageRows[year];
-  const releases = catalog.sources.filter(s => s.id.startsWith(`census-${year}-`));
+  const releases = censusSources(catalog.sources, year);
   const empty = Object.fromEntries(ids.map(id => [id, { population: null, childrenPct: null, seniorsPct: null, ...noShares() }]));
   if (!rows || releases.length !== 1) return { values: empty, source: null };
   const source = releases[0];
