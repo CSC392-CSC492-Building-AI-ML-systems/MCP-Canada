@@ -5,7 +5,7 @@ import { measuredNumber, money } from "../explorer/NeighbourhoodDetailsPanel";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import type { SearchProfile } from "./state";
 import { type AmenityKey, type ComparisonExtras, type NearbyCategory } from "./comparison-extras";
-import { lifestyleMatch, matchScore } from "./scoring";
+import { FACTORS, lifestyleMatch, scoreBreakdown } from "./scoring";
 import { tripMinutes, type CommuteState } from "./commutes";
 import { TripValue, tripNote } from "./TripCells";
 import styles from "./workflow.module.css";
@@ -39,14 +39,22 @@ export function ComparisonTable({ profiles, preferences, extras, commutes = noTr
   };
   const num = (n: number | null | undefined) => n == null ? "—" : n.toLocaleString("en-CA");
   const pct = (n: number | null | undefined) => n == null ? "—" : `${n.toFixed(1)}%`;
+  // Same breakdown as the neighbourhood panel and recommendations, so a place scores the same everywhere.
+  const breakdowns = profiles.map((p, i) => extras ? scoreBreakdown(costs[i], extras.byPlace[p.geography.id], preferences,
+    { work: tripMinutes(commutes.work, p.geography.id), school: tripMinutes(commutes.school, p.geography.id) }) : null);
+  const scores = breakdowns.map(b => b?.score ?? null);
+  const best = Math.max(...scores.filter((n): n is number => n !== null));
   return <div className={styles.tableScroll}><table className={styles.compareTable} style={{ minWidth: 220 + profiles.length * 272 }}><caption className={styles.srOnly}>Neighbourhoods compared for one shared Census year and boundary set</caption><thead><tr><th scope="col">{profiles[0]?.year} snapshot</th>{profiles.map(p => <th key={p.geography.id} scope="col">
     <ComparisonMap geographyId={p.geography.id} boundarySetId={p.geography.boundary_set} name={p.geography.name} /><Link href={`/housing/?neighbourhood=${encodeURIComponent(p.data_geography?.id ?? p.geography.id)}&year=${p.year}`}>{p.geography.name}</Link><small>Toronto · {p.year} Census<br />Live map · present-day basemap</small></th>)}</tr></thead><tbody>
-    <tr><th scope="row">Partial match score<small>Only factors with data, weighted by your profile</small></th>{profiles.map((p, i) => { const m = extras ? matchScore(costs[i], extras.byPlace[p.geography.id], preferences,
-      { work: tripMinutes(commutes.work, p.geography.id), school: tripMinutes(commutes.school, p.geography.id) }) : null;
-      return <td key={p.geography.id}>{m ? <>{m.score} / 100<small>Covers {m.covers.join(" & ")}</small></> : extras ? "—" : "…"}</td>; })}</tr>
+    <tr><th scope="row">Match score<small>Weighted by your profile · factors without data are left out, never counted as zero</small></th>{profiles.map((p, i) => { const b = breakdowns[i];
+      const missing = b?.factors.filter(f => f.status === "unavailable").map(f => f.label.toLowerCase()) ?? [];
+      return <td key={p.geography.id} className={scores[i] !== null && scores[i] === best && profiles.length > 1 ? styles.best : undefined}>{!extras ? "…" : !preferences ? <>—<small>Complete your profile to see a match score</small></> : b?.score == null ? <>—<small>No weighted factor has data here</small></>
+        : <>{b.score} / 100<small>Based on {b.coverage.used} of {b.coverage.weighted} factors{missing.length ? ` · no data: ${missing.join(", ")}` : ""}</small></>}</td>; })}</tr>
+    {preferences && FACTORS.map((factor, f) => <tr key={factor.key}><th scope="row">{factor.label}<small>Out of 100{preferences.weights[f] ? ` · your weight ${preferences.weights[f]}` : ""}</small></th>{profiles.map((p, i) => { const row = breakdowns[i]?.factors[f];
+      return <td key={p.geography.id}>{!extras || !row ? "…" : row.status === "scored" ? <>{row.score} / 100<small>{row.detail}</small></> : row.status === "off" ? <>Off<small>Weight 0 in your profile</small></> : <>n/a<small>{row.reason}</small></>}</td>; })}</tr>)}
     <tr><th scope="row">Renter shelter / month</th>{profiles.map((p, i) => <td key={p.geography.id} className={costs[i] !== null && costs[i] === cheapest ? styles.best : undefined}>{show(p, "cost")}</td>)}</tr>
     <tr><th scope="row">Published household income / year</th>{profiles.map(p => <td key={p.geography.id}>{show(p, "income")}</td>)}</tr>
-    <tr><th scope="row">Share of your entered income</th>{profiles.map((p, i) => <td key={p.geography.id}>{costs[i] !== null && preferences?.income && Number(preferences.income) > 0 ? `${(costs[i]! / (Number(preferences.income) / 12) * 100).toFixed(1)}%` : "—"}</td>)}</tr>
+    <tr><th scope="row">Share of your income<small>Rent ÷ (yearly income in your profile ÷ 12)</small></th>{profiles.map((p, i) => <td key={p.geography.id}>{costs[i] !== null && preferences?.income && Number(preferences.income) > 0 ? `${(costs[i]! / (Number(preferences.income) / 12) * 100).toFixed(1)}%` : "—"}</td>)}</tr>
     <tr><th scope="row">Within your rent budget</th>{profiles.map((p, i) => <td key={p.geography.id}>{costs[i] !== null && preferences ? costs[i]! <= Number(preferences.rent) ? "Yes" : "No" : "—"}</td>)}</tr>
     <tr><th scope="row">Published housing burden{profiles.find(p => p.metrics.burden.unit)?.metrics.burden.unit === "households" ? " (households)" : " (%)"}</th>{profiles.map(p => <td key={p.geography.id}>{show(p, "burden")}</td>)}</tr>
     <tr><th scope="row">Population</th>{profiles.map(p => <td key={p.geography.id}>{num(extras?.byPlace[p.geography.id]?.population)}</td>)}</tr>
