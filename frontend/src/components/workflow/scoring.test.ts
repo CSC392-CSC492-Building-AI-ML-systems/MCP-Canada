@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { PlaceExtras } from "./comparison-extras";
-import { affordabilityScore, matchScore, scoreBreakdown, type Factor } from "./scoring";
+import { affordabilityScore, commuteCheck, matchScore, scoreBreakdown, type Factor } from "./scoring";
 import type { SearchProfile } from "./state";
 
 const profile: SearchProfile = { version: 1, income: "", rent: "2000", mode: "Transit", work: "", school: "", trip: 40,
@@ -50,7 +50,7 @@ it("explains why a weighted trip is unavailable", () => {
   expect(noAddress.commute).toMatchObject({ status: "unavailable", reason: "No work address in your profile" });
   const withAddress = { ...trips, workPoint: { lng: -79.38, lat: 43.65 }, schoolPoint: { lng: -79.4, lat: 43.7 } };
   const f = byKey(scoreBreakdown(null, empty, withAddress, { work: 20, school: null })!.factors);
-  expect(f.commute).toMatchObject({ status: "scored", score: 100, detail: "20 min by transit (your limit is 40 min)" });
+  expect(f.commute).toMatchObject({ status: "scored", score: 100, detail: "20 min by transit, within your 40-minute limit" });
   expect(f.school).toMatchObject({ status: "unavailable", reason: "No travel time for this neighbourhood" });
 });
 
@@ -92,4 +92,29 @@ it("shows the income share and flags rent over 30% of income", () => {
   expect(b.flags).toEqual(["over_income_guideline"]);
   // A blank or invalid income is ignored, never treated as 0.
   expect(scoreBreakdown(2300, empty, { ...profile, income: " ", rent: "2500" })!.flags).toEqual([]);
+});
+
+it("checks each trip against the limit on its own, never the average", () => {
+  // Proposal case: 20 and 55 minutes with a 40-minute limit average 37.5 but one is over.
+  const result = commuteCheck({ work: 20, school: 55 }, 40);
+  expect(result.anyOverLimit).toBe(true);
+  expect(result.checks).toEqual([
+    { trip: "work", minutes: 20, overLimit: false },
+    { trip: "school", minutes: 55, overLimit: true },
+  ]);
+  expect(commuteCheck({ work: 40 }, 40, { work: true, school: false }).anyOverLimit).toBe(false); // exactly at the limit is fine
+});
+
+it("marks a trip with no travel time as unavailable, not within or over", () => {
+  expect(commuteCheck({ work: null, school: 30 }, 40).checks[0]).toEqual({ trip: "work", minutes: null, overLimit: null });
+  expect(commuteCheck({ work: 20 }, 40, { work: true, school: false }).checks).toHaveLength(1); // no school address: left out
+});
+
+it("flags a neighbourhood when either commute is over the limit", () => {
+  const both = { ...profile, weights: [0, 4, 4, 0, 0, 0], workPoint: { lng: -79.38, lat: 43.65 }, schoolPoint: { lng: -79.4, lat: 43.7 } };
+  const b = scoreBreakdown(null, empty, both, { work: 20, school: 55 })!;
+  expect(b.flags).toEqual(["commute_over_limit"]);
+  expect(b.trips.map(t => t.overLimit)).toEqual([false, true]);
+  expect(byKey(b.factors).school).toMatchObject({ detail: "55 min by transit, over your 40-minute limit" });
+  expect(scoreBreakdown(null, empty, both, { work: 20, school: 35 })!.flags).toEqual([]);
 });

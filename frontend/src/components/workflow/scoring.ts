@@ -68,10 +68,27 @@ export type Breakdown = {
   coverage: { used: number; weighted: number };
   /** All six factors, in profile order. */
   factors: Factor[];
-  flags: ("over_budget" | "over_income_guideline")[];
+  flags: ("over_budget" | "over_income_guideline" | "commute_over_limit")[];
+  /** Each trip with a destination, checked against your limit on its own. */
+  trips: TripCheck[];
 };
 
 export type Trips = { work?: number | null; school?: number | null };
+export type TripKind = "work" | "school";
+/** overLimit is null when the trip has no travel time: "unavailable", never assumed fine or too long. */
+export type TripCheck = { trip: TripKind; minutes: number | null; overLimit: boolean | null };
+
+/** Checks every trip against the limit separately, never their average: 20 and 55 minutes with a
+ * 40-minute limit is over the limit even though the average is 37.5. Trips without a destination
+ * are left out. */
+export function commuteCheck(trips: Partial<Record<TripKind, number | null | undefined>>, limit: number,
+  destinations: Record<TripKind, boolean> = { work: true, school: true }): { checks: TripCheck[]; anyOverLimit: boolean } {
+  const checks = (["work", "school"] as const).filter(t => destinations[t]).map(trip => {
+    const minutes = trips[trip] ?? null;
+    return { trip, minutes, overLimit: minutes === null || !(limit > 0) ? null : minutes > limit };
+  });
+  return { checks, anyOverLimit: checks.some(c => c.overLimit === true) };
+}
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-CA")}`;
 
@@ -118,7 +135,8 @@ function factorValues(shelterCost: number | null, extras: PlaceExtras | undefine
   const trip = (minutes: number | null | undefined, hasDestination: boolean, what: string) => {
     const value = commuteScore(minutes, preferences.trip);
     if (value === null || minutes == null) return { reason: hasDestination ? "No travel time for this neighbourhood" : `No ${what} address in your profile` };
-    return { value, detail: `${minutes} min by ${preferences.mode.toLowerCase()} (your limit is ${preferences.trip} min)` };
+    const over = preferences.trip > 0 && minutes > preferences.trip;
+    return { value, detail: `${minutes} min by ${preferences.mode.toLowerCase()}, ${over ? "over" : "within"} your ${preferences.trip}-minute limit` };
   };
   values.commute = trip(trips.work, !!preferences.workPoint, "work");
   values.school = trip(trips.school, !!preferences.schoolPoint, "school");
@@ -160,11 +178,14 @@ export function scoreBreakdown(shelterCost: number | null, extras: PlaceExtras |
   const flags: Breakdown["flags"] = [];
   if (afford && !afford.withinBudget) flags.push("over_budget");
   if (afford?.meetsGuideline === false) flags.push("over_income_guideline");
+  const commute = commuteCheck(trips, preferences.trip, { work: !!preferences.workPoint, school: !!preferences.schoolPoint });
+  if (commute.anyOverLimit) flags.push("commute_over_limit");
   return {
     score: total ? Math.round(scored.reduce((sum, p) => sum + p.weight * p.value, 0) / total) : null,
     coverage: { used: scored.length, weighted: factors.filter(f => f.status !== "off").length },
     factors,
     flags,
+    trips: commute.checks,
   };
 }
 
