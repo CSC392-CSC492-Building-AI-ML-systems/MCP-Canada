@@ -34,23 +34,22 @@ function FactorRow({ factor }: { factor: Factor }) {
   </div>;
 }
 
-export function NeighbourhoodDetailsPanel({ profile, catalog, income, budget, onIncomeChange, onBudgetChange, onCompare, saved, limitReached, onAskTeacher }: {
+export function NeighbourhoodDetailsPanel({ profile, catalog, onCompare, saved, limitReached, onAskTeacher }: {
   profile: NeighbourhoodProfile;
   /** Needed to rank this place against all neighbourhoods for its match score. */
   catalog?: Catalog | null;
-  income: string; budget: string;
-  onIncomeChange: (value: string) => void; onBudgetChange: (value: string) => void;
   onCompare?: () => void; saved?: boolean; limitReached?: boolean; onAskTeacher?: () => void;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
   useEffect(() => { scroll.current?.scrollTo({ top: 0 }); }, [profile.geography.id]);
   const { cost, income: householdIncome, burden } = profile.metrics;
   const costValue = measuredNumber(cost);
-  const result = affordability(costValue, income, budget);
   const sources = [...new Map(Object.values(profile.metrics).filter(m => m.source).map(m => [m.source!.id, m.source!])).values()];
   const historical = profile.geography.boundary_set === "toronto-140";
   const rawPreferences = useSyncExternalStore(subscribeSession, () => readSession(PROFILE_KEY), () => null);
   const preferences = useMemo(() => parseProfile(rawPreferences), [rawPreferences]);
+  // Uses the same income and rent budget as the match score, so the two always agree.
+  const result = affordability(costValue, preferences?.income ?? "", preferences?.rent ?? "");
   const commutePlaces = useMemo(() => [{ id: profile.geography.id, boundarySetId: profile.geography.boundary_set }], [profile.geography.id, profile.geography.boundary_set]);
   const commutes = useCommutes(commutePlaces, preferences);
   // Ranks, safety and lifestyle data for this place, ranked against every neighbourhood in its boundary set,
@@ -75,8 +74,11 @@ export function NeighbourhoodDetailsPanel({ profile, catalog, income, budget, on
   const why = breakdown ? explainScore(breakdown) : [];
   const historyMax =Math.max(1, ...profile.history.map(h => measuredNumber(h.cost) ?? 0));
   const explanation = costValue === null ? `Renter shelter cost is unavailable for this neighbourhood in ${profile.year}. It is excluded from your affordability check.` :
-    result.incomeShare === null ? `The published ${profile.year} renter shelter cost is ${money(costValue)} per month. Enter income to check its share of your household budget.` :
-    `The ${profile.year} shelter-cost benchmark would use ${result.incomeShare.toFixed(1)}% of the monthly income you entered (your annual income ÷ 12).${result.withinBudget === null ? "" : result.withinBudget ? " It is within your stated monthly budget." : " It exceeds your stated monthly budget."}`;
+    !preferences ? `The published ${profile.year} renter shelter cost is ${money(costValue)} per month. Complete your profile with your income and rent budget to see how it fits.` :
+    `The published ${profile.year} renter shelter cost is ${money(costValue)} per month${result.withinBudget === null ? "" : result.withinBudget ? `, within your rent budget of ${money(Number(preferences.rent))}` : `, over your rent budget of ${money(Number(preferences.rent))}`}. ` +
+    (result.incomeShare === null ? "Add your yearly income in your profile to see its share of your income."
+      : `That is ${result.incomeShare.toFixed(1)}% of your monthly income (the yearly income in your profile ÷ 12); the guideline is 30% or less.`) +
+    (profile.year !== 2021 && result.incomeShare !== null ? ` This compares a ${profile.year} cost with today's income.` : "");
   return <aside className={styles.detailsPanel} aria-labelledby="neighbourhood-name">
     <div className={styles.panelScroll} ref={scroll}>
       <header className={styles.neighbourhoodHeading}><div><p className={styles.kicker}>TORONTO · {historical ? "HISTORICAL 140" : "CURRENT 158"}</p><h1 id="neighbourhood-name">{profile.geography.name}</h1><p className={styles.caption}>{profile.year} Census · Neighbourhood {profile.geography.code}</p></div><div className={styles.scoreBadge} aria-label={breakdown?.score != null ? `Match score ${breakdown.score} out of 100` : "Match score not available"}><strong>{breakdown?.score ?? "—"}</strong><span>/ 100</span></div></header>
@@ -114,22 +116,13 @@ export function NeighbourhoodDetailsPanel({ profile, catalog, income, budget, on
         </dl>
         <p className={styles.caption}>Shelter costs include applicable utilities. This is a Census benchmark across rented dwellings, not an advertised rent.</p>
       </section>
-      <section className={styles.budgetBox} aria-labelledby="budget-title"><h2 id="budget-title">Try your own budget</h2><p className={styles.caption}>Before-tax household income · stays in this page</p>
-        <label htmlFor="annual-income">Annual household income ($)<input id="annual-income" type="number" min="1" step="any" inputMode="decimal" placeholder="e.g. 72000" value={income} aria-invalid={!!result.incomeError} aria-describedby={result.incomeError ? 'income-error' : undefined} onChange={e => onIncomeChange(e.target.value)} /></label>
-        {result.incomeError && <p id="income-error" className={styles.validation}>{result.incomeError}</p>}
-        <label htmlFor="rent-budget">Monthly housing budget ($)<input id="rent-budget" type="number" min="0" step="any" inputMode="decimal" placeholder="e.g. 1800" value={budget} aria-invalid={!!result.budgetError} aria-describedby={result.budgetError ? 'budget-error' : undefined} onChange={e => onBudgetChange(e.target.value)} /></label>
-        {result.budgetError && <p id="budget-error" className={styles.validation}>{result.budgetError}</p>}
-        <div className={styles.budgetResult} aria-live="polite"><span>30% income guideline</span><strong>{result.monthlyLimit === null ? '—' : `${money(result.monthlyLimit)} / mo.`}</strong></div>
-        <p className={styles.caption}>{result.meetsGuideline === null ? 'Enter income to compare the published housing cost with the 30% guideline.' : result.meetsGuideline ? 'The selected benchmark is at or below 30% of your entered income.' : 'The selected benchmark exceeds 30% of your entered income.'} This is a budget illustration, not the published housing-burden rate above.</p>
-        {costValue !== null && result.incomeShare !== null && <p className={styles.caption}>You are comparing a {profile.year} cost with the income you enter. Use a matching income period for a historical budget check.</p>}
-      </section>
       <section className={styles.panelSection} aria-labelledby="history-title"><h2 id="history-title">Housing through time</h2><p className={styles.caption}>Same {historical ? '140' : '158'} boundary set · no filled gaps</p>
         <div className={styles.historyBars}>{profile.history.map(h => { const value = measuredNumber(h.cost); return <div key={h.year} aria-label={`${h.year}: ${value === null ? 'unavailable' : money(value)}`}><span>{h.year}</span><span className={styles.historyTrack}>{value !== null && <span style={{ width: `${value / historyMax * 100}%` }} />}</span><strong>{value === null ? '—' : money(value)}</strong></div>; })}</div>
         <p className={styles.caption}>Earlier records use average gross rent; 2011 and 2021 use median renter shelter costs. No change percentage is calculated across different definitions or boundaries.</p>
       </section>
       <section className={styles.panelSection}><h2>Sources and method</h2><p className={styles.verifiedTag}>PUBLISHED DATA · SOURCE YEARS SHOWN</p>
         {sources.map(source => <div className={styles.sourceItem} key={source.id}><a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a><p>{source.publisher}</p><p>{source.coverage}</p></div>)}
-        <details><summary>Definitions, periods &amp; calculations</summary><p>{profile.method.housing}</p><p>{profile.method.income}</p><p>Personal income share = monthly shelter cost ÷ (entered annual income ÷ 12) × 100. The guideline uses 30% of before-tax income and is not an overall match score.</p><p>{profile.method.inflation}</p><p>{profile.method.comparison}</p><p>{profile.method.release_selection}</p>
+        <details><summary>Definitions, periods &amp; calculations</summary><p>{profile.method.housing}</p><p>{profile.method.income}</p><p>Personal income share = monthly shelter cost ÷ (yearly income in your profile ÷ 12) × 100. The guideline uses 30% of before-tax income and is not an overall match score.</p><p>{profile.method.inflation}</p><p>{profile.method.comparison}</p><p>{profile.method.release_selection}</p>
           {Object.entries(profile.metrics).map(([key,m]) => <p key={key}><strong>{key}</strong>: {m.label ?? 'Not available'} · {m.status}{m.source && <> · Census {m.census_year}; reference {m.reference_year} · {m.source_locator} · release {m.source.id}</>}</p>)}
         </details>
       </section>
