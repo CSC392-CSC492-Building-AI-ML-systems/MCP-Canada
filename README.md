@@ -327,3 +327,4 @@ uv run python manage.py build_transit_index
 This writes `data/normalized/ttc-transit-index.pickle` for the busiest Tuesday to Thursday
 in the feed. Rebuild it after downloading a newer TTC feed. Without it, transit rows
 explain that the index is missing; the rest of the page still works.
+Last updated: November 2026
