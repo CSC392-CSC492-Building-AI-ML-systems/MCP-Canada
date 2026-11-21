@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { Catalog } from "../explorer/data";
 import type { NeighbourhoodProfile } from "../explorer/types";
-import { lifestyleMatch, matchScore, neighbourhoodMeasures, percentRank, rankAll, rankSafety, type PlaceExtras } from "./comparison-extras";
+import { neighbourhoodMeasures, percentRank, rankAll, rankSafety, type PlaceExtras } from "./comparison-extras";
+import { lifestyleMatch, matchScore } from "./scoring";
 import { parseProfile, type SearchProfile } from "./state";
 
 const profile: SearchProfile = { version: 1, income: "72000", rent: "1500", bedrooms: "2", mode: "Transit", work: "", school: "", trip: 30, priorities: [1], weights: [0, 0, 0, 5, 5, 0], interests: [], notes: "" };
