@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { PlaceExtras } from "./comparison-extras";
-import { affordabilityScore, commuteCheck, matchScore, scoreBreakdown, type Factor } from "./scoring";
+import { affordabilityScore, commuteCheck, explainScore, matchScore, scoreBreakdown, type Factor } from "./scoring";
 import type { SearchProfile } from "./state";
 
 const profile: SearchProfile = { version: 1, income: "", rent: "2000", mode: "Transit", work: "", school: "", trip: 40,
@@ -117,4 +117,30 @@ it("flags a neighbourhood when either commute is over the limit", () => {
   expect(b.trips.map(t => t.overLimit)).toEqual([false, true]);
   expect(byKey(b.factors).school).toMatchObject({ detail: "55 min by transit, over your 40-minute limit" });
   expect(scoreBreakdown(null, empty, both, { work: 20, school: 35 })!.flags).toEqual([]);
+});
+
+it("explains the score from its own factors: strongest, weakest, flags and gaps", () => {
+  // affordability 100 × 5 = 500 helps most; amenities 60 × 3 costs 120; safety (weight 2) has no data.
+  const b = scoreBreakdown(1500, ranked({ libraries: 60 }), profile)!;
+  expect(explainScore(b)).toEqual([
+    "Strongest: Affordability, 100/100 ($1,500/mo, within your budget).",
+    "Held back most by: Nearby amenities, 60/100 (Ranks 60 of 100 for libraries, schools, groceries and transit stops nearby).",
+    "Not included, because there is no data: Safety.",
+    "Based on 2 of the 3 factors you weighted.",
+  ]);
+});
+
+it("names the trade-off when a place is over budget or a trip is over the limit", () => {
+  const both = { ...profile, weights: [5, 4, 4, 0, 0, 0], workPoint: { lng: -79.38, lat: 43.65 }, schoolPoint: { lng: -79.4, lat: 43.7 } };
+  const lines = explainScore(scoreBreakdown(2300, empty, both, { work: 20, school: 55 })!);
+  expect(lines[0]).toBe("Strongest: Commute to work, 100/100 (20 min by transit, within your 40-minute limit).");
+  expect(lines).toContain("Rent is over your budget.");
+  expect(lines).toContain("The school trip (55 min) is over your limit.");
+});
+
+it("never mentions weight-0 factors and says plainly when there is no score", () => {
+  const lines = explainScore(scoreBreakdown(null, empty, profile)!);
+  expect(lines[0]).toBe("There is no score for this neighbourhood: none of the factors you weighted have data here.");
+  expect(lines.join(" ")).not.toMatch(/Commute|Lifestyle/); // both have weight 0 in this profile
+  expect(lines).toContain("Not included, because there is no data: Affordability, Nearby amenities, Safety.");
 });

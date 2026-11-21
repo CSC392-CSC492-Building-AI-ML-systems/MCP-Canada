@@ -198,3 +198,31 @@ export function matchScore(shelterCost: number | null, extras: PlaceExtras | und
   const covers = breakdown.factors.filter(f => f.status === "scored").map(f => FACTORS.find(d => d.key === f.key)!.name);
   return { score: breakdown.score, covers };
 }
+
+const TRIP_NAMES: Record<TripKind, string> = { work: "work trip", school: "school trip" };
+
+/** "Why this score" in plain language, built only from the breakdown so it can never disagree with
+ * the number: what helped most, what held it back most, any flags, and which weighted factors had no
+ * data. Weight-0 factors are not mentioned. Contribution = weight × score; cost = weight × (100 − score). */
+export function explainScore(breakdown: Breakdown): string[] {
+  const scored = breakdown.factors.filter((f): f is Extract<Factor, { status: "scored" }> => f.status === "scored");
+  const missing = breakdown.factors.filter(f => f.status === "unavailable").map(f => f.label);
+  const lines: string[] = [];
+  if (breakdown.score === null) {
+    lines.push("There is no score for this neighbourhood: none of the factors you weighted have data here.");
+  } else {
+    const best = scored.reduce((a, b) => b.weight * b.score > a.weight * a.score ? b : a);
+    lines.push(`Strongest: ${best.label}, ${best.score}/100 (${best.detail}).`);
+    const others = scored.filter(f => f !== best);
+    if (others.length) {
+      const worst = others.reduce((a, b) => b.weight * (100 - b.score) > a.weight * (100 - a.score) ? b : a);
+      if (worst.score < 100) lines.push(`Held back most by: ${worst.label}, ${worst.score}/100 (${worst.detail}).`);
+    }
+  }
+  if (breakdown.flags.includes("over_budget")) lines.push("Rent is over your budget.");
+  if (breakdown.flags.includes("over_income_guideline")) lines.push(`Rent is more than ${INCOME_GUIDELINE_PCT}% of your monthly income.`);
+  for (const t of breakdown.trips) if (t.overLimit) lines.push(`The ${TRIP_NAMES[t.trip]} (${t.minutes} min) is over your limit.`);
+  if (missing.length) lines.push(`Not included, because there is no data: ${missing.join(", ")}.`);
+  if (breakdown.score !== null) lines.push(`Based on ${breakdown.coverage.used} of the ${breakdown.coverage.weighted} factors you weighted.`);
+  return lines;
+}
