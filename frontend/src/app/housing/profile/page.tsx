@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
-import { LIFESTYLE_OPTIONS, PROFILE_KEY, RECOMMENDED_KEY, clearProfile, parseProfile, readSession, subscribeSession, writeSession, type SearchProfile } from '@/components/workflow/state';
+import { LIFESTYLE_OPTIONS, PROFILE_KEY, RECOMMENDED_KEY, clearProfile, parseProfile, readSession, subscribeSession, writeSession, type GeoPoint, type SearchProfile } from '@/components/workflow/state';
+import AddressField from '@/components/map/AddressField';
 import styles from '../data/profile.module.css';
 
 const lifestyleOptions = LIFESTYLE_OPTIONS;
@@ -31,6 +32,8 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
   const [mode, setMode] = useState(initial?.mode ?? 'Transit');
   const [work, setWork] = useState(initial?.work ?? '');
   const [school, setSchool] = useState(initial?.school ?? '');
+  const [workPoint, setWorkPoint] = useState<GeoPoint | null>(initial?.workPoint ?? null);
+  const [schoolPoint, setSchoolPoint] = useState<GeoPoint | null>(initial?.schoolPoint ?? null);
   const [trip, setTrip] = useState(initial?.trip ?? 30);
   const [priorities, setPriorities] = useState<number[]>(initial?.priorities ?? []);
   const [weights, setWeights] = useState(initial?.weights ?? [3, 3, 3, 3, 3, 3]);
@@ -48,6 +51,8 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
     setWeights(profile.weights);
     setWork('');
     setSchool('');
+    setWorkPoint(null);
+    setSchoolPoint(null);
     setMode('Transit');
     setInterests(profile.name.startsWith('Lisa') ? ['Community stories'] : []);
     setNotes('');
@@ -71,7 +76,7 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
         <div className={styles.profileTools}><Link href="/housing/personalize/">← Back to choices</Link><button type="button" onClick={() => { clearProfile(); router.refresh(); }}>Clear saved profile</button></div>
         <form onChange={() => { setSample(''); setSubmitted(false); }} onSubmit={event => {
           event.preventDefault();
-          const profile: SearchProfile = { version: 1, income, rent, mode, work, school, trip, priorities, weights, interests, notes };
+          const profile: SearchProfile = { version: 1, income, rent, mode, work, school, trip, priorities, weights, interests, notes, workPoint, schoolPoint };
           if (!parseProfile(JSON.stringify(profile))) { setSubmitted(true); return; }
           writeSession(PROFILE_KEY, JSON.stringify(profile));
           writeSession(RECOMMENDED_KEY, "[]");
@@ -111,12 +116,10 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
             <section className={styles.card} aria-labelledby="profile-travel">
               <h2 id="profile-travel">Getting around</h2>
               <p>Leave either destination blank if it doesn’t apply.</p>
-              <label>Workplace or regular destination · optional
-                <input value={work} onChange={e => setWork(e.target.value)} placeholder="Enter an address or place" />
-              </label>
-              <label>School destination · optional
-                <input value={school} onChange={e => setSchool(e.target.value)} placeholder="Enter a school or address" />
-              </label>
+              <AddressField label="Workplace or regular destination · optional" placeholder="Enter an address or place"
+                text={work} point={workPoint} onChange={(text, point) => { setWork(text); setWorkPoint(point); setSample(''); setSubmitted(false); }} />
+              <AddressField label="School destination · optional" placeholder="Enter a school or address"
+                text={school} point={schoolPoint} onChange={(text, point) => { setSchool(text); setSchoolPoint(point); setSample(''); setSubmitted(false); }} />
               <fieldset>
                 <legend>How will you usually travel?</legend>
                 <div className={styles.chips}>
@@ -182,14 +185,14 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
               </label>
               <div className={styles.context}>
                 <strong>You’re in control</strong>
-                <p>Your entries stay in this browser tab for this session. Income, destinations and notes are not sent to the server. Clear your profile at any time.</p>
+                <p>Your entries stay in this browser tab for this session. Income and notes are not sent anywhere. To find travel times, the work and school addresses you choose are looked up with Mapbox; walking, cycling and driving times also come from Mapbox, and transit trips are planned by this site&apos;s server. Neither address is stored. Clear your profile at any time.</p>
               </div>
             </section>
           </div>
 
           <section className={styles.actions} aria-labelledby="profile-actions">
             <div><h2 id="profile-actions">Ready to explore places that fit you?</h2>
-              <p>Find up to five starting points using published 2021 Census housing costs. Commute, lifestyle and history matching are not connected yet; these preferences are saved for later.</p></div>
+              <p>Find up to five starting points using published 2021 Census housing costs. Travel times to your work and school addresses appear when you compare places. History matching is not connected yet; this preference is saved for later.</p></div>
             <button type="submit">Find my neighbourhoods →</button>
           </section>
           <div className={styles.result} aria-live="polite">
