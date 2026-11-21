@@ -127,9 +127,14 @@ function factorValues(shelterCost: number | null, extras: PlaceExtras | undefine
   else if (!(budget > 0)) values.affordability = { reason: "No rent budget in your profile" };
   else {
     const a = affordabilityScore(shelterCost, budget, annualIncome(preferences));
-    const share = a.incomeSharePct === null ? "" : `, ${Math.round(a.incomeSharePct)}% of your monthly income`;
-    values.affordability = { value: a.score,
-      detail: `${money(shelterCost)}/mo, ${a.withinBudget ? "within" : `${money(shelterCost - budget)} over`} your budget${share}` };
+    const vsBudget = a.withinBudget ? "within your budget" : `${money(shelterCost - budget)} over your budget`;
+    const share = a.incomeSharePct === null ? "" : `${Math.round(a.incomeSharePct)}% of your monthly income`;
+    // Say "but" when the income check is what pulls a within-budget place down, so the low score makes sense.
+    const detail = !share ? vsBudget
+      : a.meetsGuideline === false && a.withinBudget ? `${vsBudget}, but ${share} (the guideline is ${INCOME_GUIDELINE_PCT}% or less)`
+      : a.meetsGuideline === false ? `${vsBudget} and ${share} (the guideline is ${INCOME_GUIDELINE_PCT}% or less)`
+      : `${vsBudget}, ${share}`;
+    values.affordability = { value: a.score, detail: `${money(shelterCost)}/mo, ${detail}` };
   }
 
   const trip = (minutes: number | null | undefined, hasDestination: boolean, what: string) => {

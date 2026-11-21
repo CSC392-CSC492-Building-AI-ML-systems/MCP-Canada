@@ -88,8 +88,12 @@ it("uses the budget alone when there is no income, and rent exactly at budget is
 
 it("shows the income share and flags rent over 30% of income", () => {
   const b = scoreBreakdown(2300, empty, { ...profile, income: "72000", rent: "2500" })!;
-  expect(b.factors[0]).toMatchObject({ status: "scored", score: 58, detail: "$2,300/mo, within your budget, 38% of your monthly income" });
+  expect(b.factors[0]).toMatchObject({ status: "scored", score: 58, detail: "$2,300/mo, within your budget, but 38% of your monthly income (the guideline is 30% or less)" });
   expect(b.flags).toEqual(["over_income_guideline"]);
+  expect(scoreBreakdown(1500, empty, { ...profile, income: "72000", rent: "2500" })!.factors[0])
+    .toMatchObject({ detail: "$1,500/mo, within your budget, 25% of your monthly income" });
+  expect(scoreBreakdown(2300, empty, { ...profile, income: "72000", rent: "2000" })!.factors[0])
+    .toMatchObject({ detail: "$2,300/mo, $300 over your budget and 38% of your monthly income (the guideline is 30% or less)" });
   // A blank or invalid income is ignored, never treated as 0.
   expect(scoreBreakdown(2300, empty, { ...profile, income: " ", rent: "2500" })!.flags).toEqual([]);
 });
