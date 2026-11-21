@@ -57,3 +57,10 @@ it("the teacher explains limits and does not claim missing information is known"
   expect(explainEvidence("Explain this history", null)).toContain("present-day imagery");
   expect(explainEvidence("Hello", null)).toContain("AI model is not connected");
 });
+it("without the AI model, the teacher quotes the on-screen match score for the place asked about", () => {
+  const score = (neighbourhood: string, match_score: number) => ({ neighbourhood, match_score, based_on: "5 of the 6 factors weighted in the profile", why: [`Why ${neighbourhood}.`], factors: [] });
+  const context = { title: "Comparison", profiles: [], match_scores: [score("Annex", 41), score("Mount Pleasant East", 43)] };
+  expect(explainEvidence("explain the match score for mount pleasant east", context))
+    .toBe("Mount Pleasant East: match score 43 / 100, based on 5 of the 6 factors weighted in the profile. Why Mount Pleasant East.");
+  expect(explainEvidence("how are scores worked out?", null)).toContain("nothing is counted as zero");
+});
