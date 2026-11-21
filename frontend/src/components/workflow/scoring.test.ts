@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { PlaceExtras } from "./comparison-extras";
-import { matchScore, scoreBreakdown, type Factor } from "./scoring";
+import { affordabilityScore, matchScore, scoreBreakdown, type Factor } from "./scoring";
 import type { SearchProfile } from "./state";
 
 const profile: SearchProfile = { version: 1, income: "", rent: "2000", mode: "Transit", work: "", school: "", trip: 40,
@@ -66,4 +66,30 @@ it("matchScore stays the short form of the breakdown", () => {
   const extras = ranked({ libraries: 60 });
   expect(matchScore(1500, extras, profile)).toEqual({ score: scoreBreakdown(1500, extras, profile)!.score, covers: ["affordability", "amenities"] });
   expect(matchScore(null, empty, profile)).toBeNull();
+});
+
+it("scores rent at 38% of income lower than rent at 30%, even when both fit the budget", () => {
+  // Proposal case: $2,300 rent on $72,000 a year is 38% of the $6,000 monthly income.
+  const high = affordabilityScore(2300, 4000, 72000);
+  const guideline = affordabilityScore(1800, 4000, 72000);
+  expect(Math.round(high.incomeSharePct!)).toBe(38);
+  expect(high.meetsGuideline).toBe(false);
+  expect(guideline).toMatchObject({ score: 100, incomeSharePct: 30, meetsGuideline: true });
+  expect(high.score).toBeLessThan(guideline.score);
+  expect(Math.round(high.score)).toBe(58); // (50 - 38.3) / 20
+  expect(affordabilityScore(3000, 4000, 72000).score).toBe(0); // 50% of income
+});
+
+it("uses the budget alone when there is no income, and rent exactly at budget is within it", () => {
+  expect(affordabilityScore(2000, 2000, null)).toEqual({ score: 50, withinBudget: true, incomeSharePct: null, meetsGuideline: null });
+  // The lower part counts: within the 30% guideline but over budget still scores low.
+  expect(affordabilityScore(2400, 2000, 120000).score).toBeCloseTo(10); // 24% of income, but 120% of budget
+});
+
+it("shows the income share and flags rent over 30% of income", () => {
+  const b = scoreBreakdown(2300, empty, { ...profile, income: "72000", rent: "2500" })!;
+  expect(b.factors[0]).toMatchObject({ status: "scored", score: 58, detail: "$2,300/mo, within your budget, 38% of your monthly income" });
+  expect(b.flags).toEqual(["over_income_guideline"]);
+  // A blank or invalid income is ignored, never treated as 0.
+  expect(scoreBreakdown(2300, empty, { ...profile, income: " ", rent: "2500" })!.flags).toEqual([]);
 });

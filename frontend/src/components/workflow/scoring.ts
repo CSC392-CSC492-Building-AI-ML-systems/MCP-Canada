@@ -39,7 +39,8 @@ export function lifestyleMatch(extras: PlaceExtras | undefined, priorities: numb
 /** The six profile factors, in the order of `SearchProfile.weights`. */
 export const FACTORS = [
   { key: "affordability", label: "Affordability", name: "affordability",
-    method: "2021 Census median monthly rent: 100 at or below 75% of your budget, 50 at your budget, 0 at 125% or more." },
+    method: "2021 Census median monthly rent against your budget (100 at or below 75% of it, 50 at it, 0 at 125% or more) and, "
+      + "if you gave an income, against 30% of your monthly income (100 at or under 30%, 0 at 50% or more). The lower of the two counts." },
   { key: "commute", label: "Commute to work", name: "commute",
     method: "Travel time to your work address: 100 at or under half your longest acceptable trip, 50 at it, 0 at 1.5 times it." },
   { key: "school", label: "School trip", name: "school trip",
@@ -67,22 +68,52 @@ export type Breakdown = {
   coverage: { used: number; weighted: number };
   /** All six factors, in profile order. */
   factors: Factor[];
-  flags: ("over_budget")[];
+  flags: ("over_budget" | "over_income_guideline")[];
 };
 
 export type Trips = { work?: number | null; school?: number | null };
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-CA")}`;
 
+/** Share of income the proposal and CMHC use as the affordability reference point. */
+export const INCOME_GUIDELINE_PCT = 30;
+/** Share of income at which the income part of affordability reaches 0. */
+export const INCOME_ZERO_PCT = 50;
+
+export type Affordability = { score: number; withinBudget: boolean; incomeSharePct: number | null; meetsGuideline: boolean | null };
+/** Rent against the budget and, when an income is given, against 30% of monthly before-tax income.
+ * The household's combined income is the one in the profile. The score is the lower of the two parts,
+ * so a place has to work on both to score well. */
+export function affordabilityScore(rent: number, budget: number, annualIncome: number | null): Affordability {
+  const budgetPart = Math.max(0, Math.min(100, (1.25 - rent / budget) / 0.5 * 100));
+  const share = annualIncome !== null && annualIncome > 0 ? rent * 1200 / annualIncome : null; // rent ÷ monthly income × 100, exact for whole dollars
+  const incomePart = share === null ? null
+    : Math.max(0, Math.min(100, (INCOME_ZERO_PCT - share) / (INCOME_ZERO_PCT - INCOME_GUIDELINE_PCT) * 100));
+  return {
+    score: incomePart === null ? budgetPart : Math.min(budgetPart, incomePart),
+    withinBudget: rent <= budget,
+    incomeSharePct: share,
+    meetsGuideline: share === null ? null : share <= INCOME_GUIDELINE_PCT,
+  };
+}
+const annualIncome = (profile: SearchProfile) => {
+  const n = Number(profile.income);
+  return profile.income.trim() && Number.isFinite(n) && n > 0 ? n : null;
+};
+
 /** What each factor would score, or why it can't be, before weights are applied. */
 function factorValues(shelterCost: number | null, extras: PlaceExtras | undefined, preferences: SearchProfile, trips: Trips) {
   const budget = Number(preferences.rent);
   const values: Record<FactorKey, { value: number; detail: string } | { reason: string }> = {} as never;
 
-  values.affordability = shelterCost === null ? { reason: "No published rent for this neighbourhood" }
-    : !(budget > 0) ? { reason: "No rent budget in your profile" }
-    : { value: Math.max(0, Math.min(100, (1.25 - shelterCost / budget) / 0.5 * 100)),
-        detail: `${money(shelterCost)}/mo, ${shelterCost <= budget ? "within" : `${money(shelterCost - budget)} over`} your budget` };
+  if (shelterCost === null) values.affordability = { reason: "No published rent for this neighbourhood" };
+  else if (!(budget > 0)) values.affordability = { reason: "No rent budget in your profile" };
+  else {
+    const a = affordabilityScore(shelterCost, budget, annualIncome(preferences));
+    const share = a.incomeSharePct === null ? "" : `, ${Math.round(a.incomeSharePct)}% of your monthly income`;
+    values.affordability = { value: a.score,
+      detail: `${money(shelterCost)}/mo, ${a.withinBudget ? "within" : `${money(shelterCost - budget)} over`} your budget${share}` };
+  }
 
   const trip = (minutes: number | null | undefined, hasDestination: boolean, what: string) => {
     const value = commuteScore(minutes, preferences.trip);
@@ -125,11 +156,15 @@ export function scoreBreakdown(shelterCost: number | null, extras: PlaceExtras |
   });
   const total = scored.reduce((sum, p) => sum + p.weight, 0);
   const budget = Number(preferences.rent);
+  const afford = shelterCost !== null && budget > 0 ? affordabilityScore(shelterCost, budget, annualIncome(preferences)) : null;
+  const flags: Breakdown["flags"] = [];
+  if (afford && !afford.withinBudget) flags.push("over_budget");
+  if (afford?.meetsGuideline === false) flags.push("over_income_guideline");
   return {
     score: total ? Math.round(scored.reduce((sum, p) => sum + p.weight * p.value, 0) / total) : null,
     coverage: { used: scored.length, weighted: factors.filter(f => f.status !== "off").length },
     factors,
-    flags: shelterCost !== null && budget > 0 && shelterCost > budget ? ["over_budget"] : [],
+    flags,
   };
 }
 
