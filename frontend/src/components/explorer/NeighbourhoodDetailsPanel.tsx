@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { loadComparisonExtras, type ComparisonExtras } from "../workflow/comparison-extras";
 import { tripMinutes, useCommutes } from "../workflow/commutes";
-import { explainScore, FACTORS, scoreBreakdown, type Factor } from "../workflow/scoring";
+import { explainScore, FACTORS, scoreBreakdown, screenScore, type Factor } from "../workflow/scoring";
+import { useTeacherScores } from "../workflow/Teacher";
 import { PROFILE_KEY, parseProfile, readSession, subscribeSession } from "../workflow/state";
 import { TripValue, tripNote } from "../workflow/TripCells";
 import { affordability } from "./affordability";
@@ -72,6 +73,7 @@ export function NeighbourhoodDetailsPanel({ profile, catalog, onCompare, saved, 
     work: tripMinutes(commutes.work, profile.geography.id), school: tripMinutes(commutes.school, profile.geography.id),
   });
   const why = breakdown ? explainScore(breakdown) : [];
+  useTeacherScores(breakdown && preferences ? [screenScore(profile.geography.name, breakdown)] : null);
   const historyMax =Math.max(1, ...profile.history.map(h => measuredNumber(h.cost) ?? 0));
   const explanation = costValue === null ? `Renter shelter cost is unavailable for this neighbourhood in ${profile.year}. It is excluded from your affordability check.` :
     !preferences ? `The published ${profile.year} renter shelter cost is ${money(costValue)} per month. Complete your profile with your income and rent budget to see how it fits.` :

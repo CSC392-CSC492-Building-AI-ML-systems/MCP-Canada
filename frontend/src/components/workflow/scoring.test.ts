@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import type { PlaceExtras } from "./comparison-extras";
-import { affordabilityScore, commuteCheck, explainScore, matchScore, scoreBreakdown, type Factor } from "./scoring";
+import { affordabilityScore, commuteCheck, explainScore, matchScore, scoreBreakdown, screenScore, type Factor } from "./scoring";
+import { withScores } from "./Teacher";
 import type { SearchProfile } from "./state";
 
 const profile: SearchProfile = { version: 1, income: "", rent: "2000", mode: "Transit", work: "", school: "", trip: 40,
@@ -147,4 +148,23 @@ it("never mentions weight-0 factors and says plainly when there is no score", ()
   expect(lines[0]).toBe("There is no score for this neighbourhood: none of the factors you weighted have data here.");
   expect(lines.join(" ")).not.toMatch(/Commute|Lifestyle/); // both have weight 0 in this profile
   expect(lines).toContain("Not included, because there is no data: Affordability, Nearby amenities, Safety.");
+});
+
+it("gives the AI teacher the score exactly as shown, with every factor and why it was left out", () => {
+  const b = scoreBreakdown(1500, { ...ranked({ libraries: 60 }), safetyGap: "No police data for 2021" }, profile)!;
+  const s = screenScore("Erindale", b);
+  expect(s).toMatchObject({ neighbourhood: "Erindale", match_score: b.score, based_on: "2 of the 3 factors weighted in the profile", why: explainScore(b) });
+  expect(s.factors.find(f => f.factor === "Safety")).toEqual({ factor: "Safety", weight: 2, score: null,
+    note: "Unavailable: No police data for 2021. Left out of the score." });
+  expect(s.factors.find(f => f.factor === "Commute to work")?.note).toBe("Off (weight 0 in the profile). Left out of the score.");
+});
+
+it("sends match scores ahead of the profiles, and nothing extra when there are none", () => {
+  const screen = { title: "Erindale · 2021 Census", profiles: [] };
+  const scores = [screenScore("Erindale", scoreBreakdown(1500, ranked({ libraries: 60 }), profile)!)];
+  const sent = withScores(screen, JSON.stringify(scores))!;
+  expect(Object.keys(sent)).toEqual(["title", "match_scores", "profiles"]);
+  expect(sent.match_scores).toEqual(scores);
+  expect(withScores(screen, null)).toBe(screen);
+  expect(withScores(null, JSON.stringify(scores))).toBeNull();
 });

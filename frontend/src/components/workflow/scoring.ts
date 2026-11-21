@@ -231,3 +231,28 @@ export function explainScore(breakdown: Breakdown): string[] {
   if (breakdown.score !== null) lines.push(`Based on ${breakdown.coverage.used} of the ${breakdown.coverage.weighted} factors you weighted.`);
   return lines;
 }
+
+/** What the AI teacher gets for one place on screen: the score exactly as the page shows it,
+ * so the teacher can quote and explain it instead of working out its own. */
+export type ScreenScore = {
+  neighbourhood: string;
+  match_score: number | null;
+  based_on: string;
+  why: string[];
+  factors: { factor: string; weight: number; score: number | null; note: string }[];
+};
+
+export function screenScore(neighbourhood: string, breakdown: Breakdown): ScreenScore {
+  return {
+    neighbourhood,
+    match_score: breakdown.score,
+    based_on: `${breakdown.coverage.used} of the ${breakdown.coverage.weighted} factors weighted in the profile`,
+    why: explainScore(breakdown),
+    factors: breakdown.factors.map(f => ({
+      factor: f.label, weight: f.weight, score: f.status === "scored" ? f.score : null,
+      note: f.status === "scored" ? f.detail
+        : f.status === "unavailable" ? `Unavailable: ${f.reason}. Left out of the score.`
+        : "Off (weight 0 in the profile). Left out of the score.",
+    })),
+  };
+}

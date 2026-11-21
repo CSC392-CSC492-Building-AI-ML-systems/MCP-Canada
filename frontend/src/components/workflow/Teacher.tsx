@@ -3,12 +3,26 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { usePathname } from "next/navigation";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import { measuredNumber, money } from "../explorer/NeighbourhoodDetailsPanel";
+import type { ScreenScore } from "./scoring";
 import styles from "./workflow.module.css";
-export type TeachingContext = { title: string; profiles: NeighbourhoodProfile[] } | null;
-const TeacherContext = createContext<{ context: TeachingContext; setContext: (value: TeachingContext) => void; openTeacher: () => void }>({ context: null, setContext: () => {}, openTeacher: () => {} });
+/** What is on screen. `match_scores` is sent to the teacher as shown, so it quotes rather than recomputes. */
+export type TeachingContext = { title: string; match_scores?: ScreenScore[]; profiles: NeighbourhoodProfile[] } | null;
+const TeacherContext = createContext<{ context: TeachingContext; setContext: (value: TeachingContext) => void; openTeacher: () => void; scores: string | null; setScores: (value: string | null) => void }>({ context: null, setContext: () => {}, openTeacher: () => {}, scores: null, setScores: () => {} });
 export const useTeacher = () => useContext(TeacherContext);
+/** Shares the match scores a page shows with the AI teacher, and clears them when the page goes away.
+ * Kept as JSON text so an unchanged score does not trigger another update. */
+export function useTeacherScores(scores: ScreenScore[] | null) {
+  const { setScores } = useTeacher();
+  const key = scores?.length ? JSON.stringify(scores) : null;
+  useEffect(() => { setScores(key); return () => setScores(null); }, [key, setScores]);
+}
+/** The context sent with a question: match scores first, so they are not cut off by long profiles. */
+export function withScores(context: TeachingContext, scores: string | null): TeachingContext {
+  return context && scores ? { title: context.title, match_scores: JSON.parse(scores) as ScreenScore[], profiles: context.profiles } : context;
+}
 export function TeacherProvider({ children }: { children: ReactNode }) {
   const [context, setContext] = useState<TeachingContext>(null);
+  const [scores, setScores] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const openTeacher = useCallback(() => setOpen(true), []);
@@ -18,7 +32,7 @@ export function TeacherProvider({ children }: { children: ReactNode }) {
     if (open && !panel.current?.open) panel.current?.showModal();
     if (!open && panel.current?.open) panel.current?.close();
   }, [open]);
-  return <TeacherContext.Provider value={{ context, setContext, openTeacher }}>{children}
+  return <TeacherContext.Provider value={{ context, setContext, openTeacher, scores, setScores }}>{children}
     {!pathname?.startsWith("/housing/compare") && !(isMap && context) && <button type="button" className={styles.teacherLauncher} onClick={openTeacher}>✦ Ask the AI teacher</button>}
     <dialog ref={panel} className={styles.teacherDialog} onCancel={() => setOpen(false)} onClose={() => setOpen(false)} aria-label="Your history teacher"><TeacherPanel onClose={() => setOpen(false)} /></dialog>
   </TeacherContext.Provider>;
@@ -50,7 +64,8 @@ export async function askAgent(question: string, context: TeachingContext, timeo
   } finally { clearTimeout(timer); }
 }
 export function TeacherPanel({ onClose }: { onClose?: () => void }) {
-  const { context } = useTeacher();
+  const { context: screen, scores } = useTeacher();
+  const context = withScores(screen, scores);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<TeacherMessage[]>([]);
   const busy = messages.some(m => m.status === "pending");

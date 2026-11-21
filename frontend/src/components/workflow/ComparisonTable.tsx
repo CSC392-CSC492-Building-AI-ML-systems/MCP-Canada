@@ -5,7 +5,8 @@ import { measuredNumber, money } from "../explorer/NeighbourhoodDetailsPanel";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import type { SearchProfile } from "./state";
 import { type AmenityKey, type ComparisonExtras, type NearbyCategory } from "./comparison-extras";
-import { FACTORS, lifestyleMatch, scoreBreakdown } from "./scoring";
+import { FACTORS, lifestyleMatch, scoreBreakdown, screenScore } from "./scoring";
+import { useTeacherScores } from "./Teacher";
 import { tripMinutes, type CommuteState } from "./commutes";
 import { TripValue, tripNote } from "./TripCells";
 import styles from "./workflow.module.css";
@@ -44,6 +45,7 @@ export function ComparisonTable({ profiles, preferences, extras, commutes = noTr
     { work: tripMinutes(commutes.work, p.geography.id), school: tripMinutes(commutes.school, p.geography.id) }) : null);
   const scores = breakdowns.map(b => b?.score ?? null);
   const best = Math.max(...scores.filter((n): n is number => n !== null));
+  useTeacherScores(preferences ? profiles.flatMap((p, i) => { const b = breakdowns[i]; return b ? [screenScore(p.geography.name, b)] : []; }) : null);
   return <div className={styles.tableScroll}><table className={styles.compareTable} style={{ minWidth: 220 + profiles.length * 272 }}><caption className={styles.srOnly}>Neighbourhoods compared for one shared Census year and boundary set</caption><thead><tr><th scope="col">{profiles[0]?.year} snapshot</th>{profiles.map(p => <th key={p.geography.id} scope="col">
     <ComparisonMap geographyId={p.geography.id} boundarySetId={p.geography.boundary_set} name={p.geography.name} /><Link href={`/housing/?neighbourhood=${encodeURIComponent(p.data_geography?.id ?? p.geography.id)}&year=${p.year}`}>{p.geography.name}</Link><small>Toronto · {p.year} Census<br />Live map · present-day basemap</small></th>)}</tr></thead><tbody>
     <tr><th scope="row">Match score<small>Weighted by your profile · factors without data are left out, never counted as zero</small></th>{profiles.map((p, i) => { const b = breakdowns[i];
