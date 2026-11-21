@@ -192,7 +192,7 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
 
           <section className={styles.actions} aria-labelledby="profile-actions">
             <div><h2 id="profile-actions">Ready to explore places that fit you?</h2>
-              <p>Find up to five starting points using published 2021 Census housing costs. Travel times to your work and school addresses appear when you compare places. History matching is not connected yet; this preference is saved for later.</p></div>
+              <p>Find your five best-matching neighbourhoods. Each is scored on rent, trips to your work and school addresses, nearby amenities, safety and your lifestyle priorities, weighted the way you set above. History matching is not connected yet.</p></div>
             <button type="submit">Find my neighbourhoods →</button>
           </section>
           <div className={styles.result} aria-live="polite">

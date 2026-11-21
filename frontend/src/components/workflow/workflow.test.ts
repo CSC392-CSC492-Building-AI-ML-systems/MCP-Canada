@@ -1,5 +1,4 @@
 import { expect, it } from "vitest";
-import { budgetStartingPoints } from "./recommendations";
 import { comparisonHref, explorerHref, parsePlaces, parseProfile, type SearchProfile } from "./state";
 import { explainEvidence } from "./Teacher";
 const profile: SearchProfile = { version: 1, income: "72000", rent: "1500", mode: "Transit", work: "", school: "", trip: 30, priorities: [1], weights: [5, 4, 5, 3, 4, 4], interests: [], notes: "private note" };
@@ -23,14 +22,6 @@ it("rejects invalid rents, preference limits, and malformed preference values", 
 
   expect(invalidProfiles.map(value => parseProfile(JSON.stringify(value))))
     .toEqual(invalidProfiles.map(() => null));
-});
-it("filters missing costs, respects budget, and does not invent fit scores", () => {
-  const rows = [{ geography_id: "a", name: "A", value: "1200", status: "observed", census_year: 2021, source_locator: "a" }, { geography_id: "b", name: "B", value: null, status: "missing", census_year: 2021, source_locator: "b" }, { geography_id: "c", name: "C", value: "1600", status: "observed", census_year: 2021, source_locator: "c" }];
-  const results = budgetStartingPoints(rows, profile);
-  expect(results.map(p => p.id)).toEqual(["a"]);
-  expect(results[0].score).toBeNull();
-  expect(budgetStartingPoints(rows, { ...profile, weights: [0, 5, 5, 5, 5, 5] })).toEqual([]);
-  expect(budgetStartingPoints(rows, { ...profile, rent: "500" })[0].summary).toContain("above your budget");
 });
 it("never puts income, destinations or notes in navigation URLs", () => {
   const url = comparisonHref([{ id: "a", name: "A", year: 2021, boundary: "toronto-158" }], "recommended");
