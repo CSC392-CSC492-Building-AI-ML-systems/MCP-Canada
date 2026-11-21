@@ -34,6 +34,10 @@ JS
   cd "$root/backend"
   uv sync --locked
   uv run --no-sync python manage.py migrate
+  # Transit commute times need the TTC schedule index; build it once the feed is downloaded.
+  if [ ! -f "$root/data/normalized/ttc-transit-index.pickle" ] && [ -f "$root/data/raw/ttc-merged.zip" ]; then
+    uv run --no-sync python manage.py build_transit_index
+  fi
 )
 (
   cd "$root/frontend"
