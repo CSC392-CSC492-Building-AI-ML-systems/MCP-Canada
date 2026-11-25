@@ -36,6 +36,11 @@ const BLANK_FORM = JSON.stringify({ version: 1, income: '', rent: '', mode: 'Tra
 
 /** The last profile this page autosaved, so its own writes don't reset the form mid-edit. */
 let ownWrite: string | null = null;
+/** Saves the profile and remembers it as this page's own write (kept outside the component for the hooks lint rule). */
+function saveOwnProfile(serialized: string) {
+  ownWrite = serialized;
+  writeSession(PROFILE_KEY, serialized);
+}
 const noSubscribe = () => () => {};
 const readReturnTo = () => safeReturnTo(new URLSearchParams(window.location.search).get('returnTo'));
 
@@ -78,8 +83,7 @@ function ProfileForm({ initial, saved, returnTo }: { initial: SearchProfile | nu
   useEffect(() => {
     if (parseProfile(serialized) === null || serialized === readSession(PROFILE_KEY)) return;
     if (readSession(PROFILE_KEY) === null && serialized === BLANK_FORM) return;
-    ownWrite = serialized;
-    writeSession(PROFILE_KEY, serialized);
+    saveOwnProfile(serialized);
   }, [serialized]);
   const notSaved = held.map(field => heldMessages[field]);
   const saveStatus = !saved && serialized === BLANK_FORM ? 'Changes save automatically as you fill in your profile.'
@@ -122,8 +126,7 @@ function ProfileForm({ initial, saved, returnTo }: { initial: SearchProfile | nu
         <form onChange={() => { setSample(''); setSubmitted(false); }} onSubmit={event => {
           event.preventDefault();
           if (!canSubmit) { setSubmitted(true); return; }
-          ownWrite = serialized;
-          writeSession(PROFILE_KEY, serialized);
+          saveOwnProfile(serialized);
           writeSession(RECOMMENDED_KEY, "[]");
           router.push("/housing/recommended/");
         }}>
