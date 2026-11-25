@@ -26,12 +26,61 @@ export function parseProfile(raw: string | null): SearchProfile | null {
     const p = JSON.parse(raw ?? "null");
     if (!p || p.version !== 1 || !["income", "rent", "mode", "work", "school", "notes"].every(k => typeof p[k] === "string")) return null;
     if (p.bedrooms !== undefined && typeof p.bedrooms !== "string") return null;
-    if (!Number.isFinite(Number(p.rent)) || Number(p.rent) <= 0 || (p.income.trim() && (!Number.isFinite(Number(p.income)) || Number(p.income) <= 0))) return null;
-    if (!Number.isFinite(p.trip) || p.trip < 0 || p.trip > 120 || !Array.isArray(p.priorities) || p.priorities.length > 3 || !p.priorities.every((n: unknown) => Number.isInteger(n) && Number(n) >= 0 && Number(n) < 8)) return null;
-    if (!Array.isArray(p.weights) || p.weights.length !== 6 || !p.weights.every((n: unknown) => Number.isInteger(n) && Number(n) >= 0 && Number(n) <= 5) || !Array.isArray(p.interests) || !p.interests.every((s: unknown) => typeof s === "string")) return null;
+    // Rent and income may be blank (not provided yet); scoring then leaves affordability out instead of counting it as 0.
+    if (!blankOrPositive(p.rent) || !blankOrPositive(p.income)) return null;
+    if (!validTrip(p.trip) || !validPriorities(p.priorities)) return null;
+    if (!validWeights(p.weights) || !Array.isArray(p.interests) || !p.interests.every((s: unknown) => typeof s === "string")) return null;
     if ([p.workPoint, p.schoolPoint].some(point => point != null && !isGeoPoint(point))) return null;
     return p;
   } catch { return null; }
+}
+const blankOrPositive = (value: string) => !value.trim() || (Number.isFinite(Number(value)) && Number(value) > 0);
+const validTrip = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 120;
+const validPriorities = (list: unknown) => Array.isArray(list) && list.length <= 3 && list.every(n => Number.isInteger(n) && n >= 0 && n < 8);
+const validWeights = (list: unknown) => Array.isArray(list) && list.length === 6 && list.every(n => Number.isInteger(n) && n >= 0 && n <= 5);
+
+/** Profile fields whose current input could not be saved, so the last saved value was kept instead. */
+export type HeldField = "rent" | "income" | "trip" | "priorities" | "weights" | "work" | "school";
+/** What autosave stores for a form draft: every valid field as entered, and for each invalid or
+ * half-finished field the last saved value (or an empty default), so one bad input never blocks the
+ * others or overwrites a good saved value. Blank optional fields are saved as blank. */
+export function profileForSave(draft: SearchProfile, saved: SearchProfile | null): { profile: SearchProfile; held: HeldField[] } {
+  const held: HeldField[] = [];
+  function keep<T>(field: HeldField, value: T, ok: boolean, previous: T | undefined, fallback: T): T {
+    if (ok) return value;
+    held.push(field);
+    return previous ?? fallback;
+  }
+  // Blank rent is only kept as blank when nothing was saved before: clearing the box to retype it is temporary.
+  const rentBlank = !draft.rent.trim();
+  const savedRent = saved?.rent.trim() ? saved.rent : undefined;
+  const rent = rentBlank && !savedRent ? draft.rent : keep("rent", draft.rent, !rentBlank && blankOrPositive(draft.rent), savedRent, "");
+  // An address counts once a suggestion with coordinates is picked, or when the box is cleared. While a
+  // new address is being typed, the saved address and its coordinates stay in use.
+  function destination(field: "work" | "school", text: string, point: GeoPoint | null | undefined, savedText = "", savedPoint?: GeoPoint | null) {
+    const chosen = isGeoPoint(point) ? point : null;
+    if (!text.trim() || chosen || !isGeoPoint(savedPoint)) return { text, point: chosen };
+    held.push(field);
+    return { text: savedText, point: savedPoint };
+  }
+  const work = destination("work", draft.work, draft.workPoint, saved?.work, saved?.workPoint);
+  const school = destination("school", draft.school, draft.schoolPoint, saved?.school, saved?.schoolPoint);
+  const profile: SearchProfile = {
+    version: 1,
+    income: keep("income", draft.income, blankOrPositive(draft.income), saved?.income, ""),
+    rent,
+    mode: draft.mode,
+    work: work.text,
+    school: school.text,
+    trip: keep("trip", draft.trip, validTrip(draft.trip), saved?.trip, 30),
+    priorities: keep("priorities", draft.priorities, validPriorities(draft.priorities), saved?.priorities, []),
+    weights: keep("weights", draft.weights, validWeights(draft.weights), saved?.weights, [3, 3, 3, 3, 3, 3]),
+    interests: draft.interests.filter(s => typeof s === "string"),
+    notes: draft.notes,
+    workPoint: work.point,
+    schoolPoint: school.point,
+  };
+  return { profile, held };
 }
 export function parsePlaces(raw: string | null): ExplorerPlace[] {
   try {
@@ -50,6 +99,16 @@ export function readProfile() {
 export function comparisonHref(places: ExplorerPlace[], from: "saved" | "recommended" = "saved") {
   const params = new URLSearchParams({ from, places: [...new Set(places.map(p => p.id))].slice(0, 5).join(",") });
   return `/housing/compare/?${params}`;
+}
+/** Only same-site comparison pages are accepted as a place to return to after editing the profile. */
+export function safeReturnTo(value: string | null | undefined): string | null {
+  if (!value || !value.startsWith("/housing/compare") || value.startsWith("//") || value.includes("\\")) return null;
+  return value;
+}
+/** Link to the profile page that remembers which comparison to return to. */
+export function profileHref(returnTo?: string | null) {
+  const safe = safeReturnTo(returnTo);
+  return safe ? `/housing/profile/?${new URLSearchParams({ returnTo: safe })}` : "/housing/profile/";
 }
 export function explorerHref(selection: { geographyId: string; year: number } | null, across = false) {
   const params = new URLSearchParams();

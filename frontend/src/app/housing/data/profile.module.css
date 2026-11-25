@@ -95,3 +95,7 @@
 
 .profileTools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
 .profileTools a { font-size: 12px; color: var(--profile-green); }
+
+.saveStatus { font-size: 12px; color: #48594c; margin-right: auto; }
+.actionButtons { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.actionButtons .returnLink { border: 1px solid var(--profile-green); border-radius: 999px; color: var(--profile-green); font-weight: 700; padding: 11px 18px; text-decoration: none; }
