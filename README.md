@@ -301,4 +301,31 @@ prerequisites, fresh versus existing databases, and troubleshooting.
 [loaded data inventory](docs/data-import-status.md) describe the data. Run
 `backend/.venv/bin/python backend/manage.py data_inventory` to inspect the actual database.
 
+## Commute and school travel times
+
+The "To work" and "To school" rows in the comparison table, and the matching tiles
+in the neighbourhood panel, show travel times from a central point inside each
+neighbourhood to the work and school addresses chosen on `/housing/profile`. The
+profile's travel mode picks the router:
+
+- **Walk, Bike, Drive**: the [Mapbox Matrix API](https://docs.mapbox.com/api/navigation/matrix/),
+  called from the browser with `NEXT_PUBLIC_MAPBOX_TOKEN`. Driving uses typical
+  speeds, not live traffic.
+- **Transit**: `POST /api/transit/commute/`, which plans trips over the published
+  TTC weekday schedule (`data/raw/ttc-merged.zip`) to arrive by 9:00 AM. Walking to,
+  between and from stops is estimated from straight-line distance; real-time delays
+  are not modelled. Destinations are posted in the request body and not stored.
+
+Transit needs a schedule index, built once after the official data is downloaded
+(about 30 seconds; `scripts/start-all.sh` builds it automatically if it is missing):
+
+```sh
+cd backend
+uv run python manage.py build_transit_index
+```
+
+This writes `data/normalized/ttc-transit-index.pickle` for the busiest Tuesday to Thursday
+in the feed. Rebuild it after downloading a newer TTC feed. Without it, transit rows
+explain that the index is missing; the rest of the page still works.
+
 Last updated: November 2026

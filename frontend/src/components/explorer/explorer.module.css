@@ -80,13 +80,6 @@
 .measurements dd { margin: 0; color: var(--green); font-size: 17px; font-weight: 700; white-space: nowrap; text-align: right; }
 .measurements dd small { display: block; color: var(--muted); font-size: 10px; font-weight: 400; }
 .sourceCaption { display: block; margin-top: 4px; font-size: 9px; color: var(--muted); }
-.budgetBox { background: #f0f3e9; border: 1px solid #dfe5d6; border-radius: 10px; padding: 13px; display: grid; gap: 9px; }
-.budgetBox h2 { font-size: 14px; }
-.budgetBox label { display: grid; gap: 5px; font-size: 11px; color: #495641; }
-.budgetBox input { min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid #c6cfbd; border-radius: 6px; color: var(--ink); background: var(--paper); font-size: 13px; }
-.budgetBox input::placeholder { color: #858b7d; }
-.budgetResult { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 2px; padding-top: 10px; border-top: 1px solid #cdd6c1; color: var(--green); font-size: 11px; }
-.budgetResult strong { font-size: 14px; }
 .validation { color: #9c3d24; font-size: 11px; }
 .historyBars { display: grid; gap: 9px; padding: 4px 0; }
 .historyBars > div { display: grid; grid-template-columns: 30px 1fr 56px; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); }
@@ -191,3 +184,6 @@
 @media (max-width: 760px) { .navigation { height: auto; min-height: 72px; flex-wrap: wrap; padding: 12px 16px; gap: 12px; } .profileLink { order: 1; } .brand { order: 0; } .viewNavigation { order: 2; width: 100%; margin-left: 0; } .viewNavigation a,.viewNavigation button { flex: 1; text-align: center; } .workspace,.workspaceExpanded { display: flex; flex-direction: column; height: auto; min-height: calc(100dvh - 120px); overflow: visible; } .savedRail { height: 52px; } .savedRail > button { flex-direction: row; padding: 10px 16px; justify-content: flex-start; } .savedRail img { width: 24px; height: 24px; } .placesSidebar { max-height: 460px; border-bottom: 1px solid var(--line); } .placeList { grid-template-columns: repeat(2,minmax(0,1fr)); } .placeCard { padding: 10px; } .placeScore { flex-basis: 36px; height: 36px; font-size: 15px; } .sidebarFooter { min-height: 0; } .mapArea { min-height: 0; } .mapSlot { min-height: 500px; flex: none; } .detailsPanel,.workspaceExpanded .detailsPanel { width: 100%; max-height: 800px; border-left: 0; border-top: 1px solid var(--line); } .mapDock { padding: 16px; } .panelScroll { padding: 20px; } .dockRow { flex-direction: row; align-items: center; } .acrossTime { width: 40%; } }
 @media (max-width: 440px) { .placeList { grid-template-columns: 1fr; } .dockRow { flex-direction: column; align-items: stretch; } .acrossTime { width: 100%; } .timelineHeading select { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .explorer * { scroll-behavior: auto; } .timelineTrack span,.timelineTrack::after,.acrossTime { transition: none; } }
+.scoreTrack > span { display: block; height: 100%; background: #6d8c54; border-radius: 3px; }
+.tripNote { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
+.quickStats small { display: block; font-size: 10px; font-weight: 400; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }

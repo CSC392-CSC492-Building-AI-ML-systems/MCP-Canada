@@ -66,6 +66,10 @@ Rules for numbers (these matter most):
 
 How to answer:
 - For anything about the neighbourhoods on screen, call get_screen_values first.
+- Match scores: get_screen_values may include match_scores, the app's scores exactly as
+  shown on screen, with each factor's score, weight and note, and the "why" lines. Quote
+  them and explain them from those factors and notes. Never compute, change or re-weight a
+  score. A factor marked unavailable was left out, not counted as zero.
 - For data that is not on screen, look in MCP-Canada first: find_canada_data_tools,
   then get_canada_data.
 - Only if MCP-Canada has no tool for it, or its tool fails or returns no rows, check the
@@ -116,7 +120,8 @@ class TeacherTools:
     declarations = [
         {
             "name": "get_screen_values",
-            "description": "The page title and the neighbourhood profiles the student is looking at, "
+            "description": "The page title, the match scores shown on screen (with each factor's score, "
+                           "weight and note), and the neighbourhood profiles the student is looking at, "
                            "with each value's year and source. Quote these values exactly.",
             "parameters": {"type": "object", "properties": {}},
         },
