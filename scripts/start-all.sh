@@ -12,6 +12,18 @@ for tool in node npm uv curl; do
   fi
 done
 
+# Load backend/.env (gitignored) so Django sees GEMINI_API_KEY and MCP_CANADA_*
+# without running `set -a; source backend/.env; set +a` by hand.
+if [[ -f "$root/backend/.env" ]]; then
+  set -a
+  source "$root/backend/.env"
+  set +a
+fi
+if [[ -z "${GEMINI_API_KEY:-}" ]]; then
+  echo 'Note: GEMINI_API_KEY is not set, so the AI teacher will use prepared explanations.' >&2
+  echo '      Add a free key to backend/.env: https://aistudio.google.com/apikey' >&2
+fi
+
 # Check both ports before installing dependencies or applying migrations.
 node - "$backend_port" "$frontend_port" <<'JS'
 const net = require('node:net');
