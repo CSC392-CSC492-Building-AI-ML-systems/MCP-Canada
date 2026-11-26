@@ -24,6 +24,7 @@ from .boundary_crosswalk import boundary_links
 from .parks import ParksUnavailable, nearby_parks
 from .land_use import LandUseUnavailable, land_use
 from . import transit
+from . import inflation
 
 
 @require_GET
@@ -559,4 +560,88 @@ def transit_commute(request):
                    "is estimated from straight-line distance (x1.3) at 4.8 km/h, up to 1 km at each end and "
                    "250 m between stops, with 1 minute to change vehicles."),
         "results": transit.commute_times(index, destination, origins, arrive_by),
+    })
+
+
+# --------------------------------------------------------------------------- inflation (CPI)
+
+def _optional_year(request, name):
+    """A year query parameter that may be left out; raises InvalidInflationRequest when malformed."""
+    raw = request.GET.get(name)
+    if raw is None or raw.strip() == "":
+        return None
+    return inflation.parse_year(raw, name)
+
+
+@require_GET
+def cpi_annual(request):
+    """Annual CPI for every year in the database, with each year's status.
+
+    Optional query parameters: start_year and end_year (inclusive).
+    """
+    try:
+        start_year = _optional_year(request, "start_year")
+        end_year = _optional_year(request, "end_year")
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    if start_year is not None and end_year is not None and start_year > end_year:
+        return JsonResponse({"error": "start_year must not be after end_year."}, status=400)
+
+    try:
+        table = inflation.load_cpi_table()
+    except inflation.InflationDataUnavailable as exc:
+        return JsonResponse({"error": str(exc)}, status=503)
+
+    return JsonResponse(inflation.table_as_dict(table, start_year, end_year))
+
+
+@require_GET
+def cpi_convert(request):
+    """Convert an amount from one year's dollars into another year's dollars.
+
+    Required query parameters: amount, from_year, to_year.
+    A year without a complete CPI gives status "not_adjusted" with a reason, never a guess.
+    """
+    try:
+        amount = inflation.parse_amount(request.GET.get("amount"), "amount")
+        from_year = inflation.parse_year(request.GET.get("from_year"), "from_year")
+        to_year = inflation.parse_year(request.GET.get("to_year"), "to_year")
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    try:
+        table = inflation.load_cpi_table()
+    except inflation.InflationDataUnavailable as exc:
+        return JsonResponse({"error": str(exc)}, status=503)
+
+    result = inflation.adjust_amount(amount, from_year, to_year, table)
+    return JsonResponse({
+        **result.as_dict(),
+        "source": table.source.as_dict() if table.source else None,
+    })
+
+
+@require_GET
+def cpi_real_change(request):
+    """Change between two values from two years, before and after inflation.
+
+    Required query parameters: from_value, to_value, from_year, to_year.
+    """
+    try:
+        from_value = inflation.parse_amount(request.GET.get("from_value"), "from_value")
+        to_value = inflation.parse_amount(request.GET.get("to_value"), "to_value")
+        from_year = inflation.parse_year(request.GET.get("from_year"), "from_year")
+        to_year = inflation.parse_year(request.GET.get("to_year"), "to_year")
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    try:
+        table = inflation.load_cpi_table()
+    except inflation.InflationDataUnavailable as exc:
+        return JsonResponse({"error": str(exc)}, status=503)
+
+    result = inflation.real_change(from_value, to_value, from_year, to_year, table)
+    return JsonResponse({
+        **result.as_dict(),
+        "source": table.source.as_dict() if table.source else None,
     })
