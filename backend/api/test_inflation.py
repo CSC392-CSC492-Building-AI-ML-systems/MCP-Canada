@@ -716,3 +716,513 @@ class CpiInventoryCommandTests(CpiDatabaseMixin, TestCase):
             self.run_command("--convert", "abc", "--from-year", "2011", "--to-year", "2021")
         with self.assertRaises(CommandError):
             self.run_command("--convert", "1000", "--from-year", "2011")
+
+
+# =========================================================================== deeper calculations
+#
+# Extra fixture for the latest-twelve-months cases: 2025 every month 125, so the
+# twelve months from 2025-10 to 2026-09 average (3 x 125 + 9 x 130) / 12 = 128.75.
+
+def fixture_table_with_months(extra=None):
+    """A CpiTable with annual values and every fixture month."""
+    rows = fixture_months() + (extra or [])
+    return CpiTable(years=inflation.annual_cpi_from_months(rows), months=inflation.months_by_period(rows))
+
+
+def fixture_table_with_recent_months():
+    """The fixture plus a complete 2025, so the latest twelve months exist."""
+    return fixture_table_with_months(months_for(2025, [125] * 12))
+
+
+class MonthHelperTests(SimpleTestCase):
+    """months_by_period, period_label, parse_month_period and previous_month."""
+
+    def test_months_by_period_keys_by_year_and_month(self):
+        months = inflation.months_by_period(months_for(2011, [100, 101]))
+        self.assertEqual(months, {(2011, 1): Decimal(100), (2011, 2): Decimal(101)})
+
+    def test_months_by_period_keeps_the_first_duplicate(self):
+        rows = months_for(2011, [100]) + [MonthlyCpi(year=2011, month=1, value=Decimal(999))]
+        self.assertEqual(inflation.months_by_period(rows)[(2011, 1)], Decimal(100))
+
+    def test_period_label_pads_the_month(self):
+        self.assertEqual(inflation.period_label(2011, 5), "2011-05")
+        self.assertEqual(inflation.period_label(2021, 12), "2021-12")
+
+    def test_parse_month_period_reads_a_month(self):
+        self.assertEqual(inflation.parse_month_period(" 2011-05 "), (2011, 5))
+
+    def test_parse_month_period_rejects_missing_input(self):
+        for raw in [None, "", "  "]:
+            with self.subTest(raw=raw):
+                with self.assertRaisesMessage(InvalidInflationRequest, "Missing period"):
+                    inflation.parse_month_period(raw)
+
+    def test_parse_month_period_rejects_other_formats(self):
+        for raw in ["2011", "2011-5", "2011-13", "May 2011", "2011-05-01"]:
+            with self.subTest(raw=raw):
+                with self.assertRaisesMessage(InvalidInflationRequest, "YYYY-MM"):
+                    inflation.parse_month_period(raw)
+
+    def test_parse_month_period_rejects_years_out_of_range(self):
+        with self.assertRaisesMessage(InvalidInflationRequest, "between 1900 and 2100"):
+            inflation.parse_month_period("1850-01")
+
+    def test_previous_month_steps_back_across_a_year(self):
+        self.assertEqual(inflation.previous_month(2026, 1), (2025, 12))
+        self.assertEqual(inflation.previous_month(2026, 9), (2026, 8))
+
+
+class AdjustBetweenMonthsTests(SimpleTestCase):
+    """adjust_between_months uses the exact monthly CPI."""
+
+    def setUp(self):
+        self.table = fixture_table_with_months()
+
+    def test_converts_between_two_months(self):
+        result = inflation.adjust_between_months(Decimal(1000), (2011, 5), (2021, 5), self.table)
+        self.assertEqual(result.status, STATUS_ADJUSTED)
+        self.assertEqual(result.adjusted_value, Decimal(1200))
+
+    def test_uses_the_month_not_the_yearly_average(self):
+        result = inflation.adjust_between_months(Decimal(109), (2016, 1), (2016, 12), self.table)
+        self.assertEqual(result.adjusted_value, Decimal(111))
+
+    def test_the_same_month_returns_the_same_value(self):
+        result = inflation.adjust_between_months(Decimal(500), (2011, 5), (2011, 5), self.table)
+        self.assertEqual(result.status, STATUS_SAME_YEAR)
+        self.assertEqual(result.adjusted_value, Decimal(500))
+
+    def test_a_month_in_an_incomplete_year_still_works(self):
+        result = inflation.adjust_between_months(Decimal(100), (2011, 1), (2026, 9), self.table)
+        self.assertEqual(result.adjusted_value, Decimal(130))
+
+    def test_a_missing_starting_month_is_not_adjusted(self):
+        result = inflation.adjust_between_months(Decimal(100), (2015, 12), (2021, 5), self.table)
+        self.assertEqual(result.status, STATUS_NOT_ADJUSTED)
+        self.assertEqual(result.reason, "No CPI is published for 2015-12.")
+
+    def test_a_missing_target_month_is_not_adjusted(self):
+        result = inflation.adjust_between_months(Decimal(100), (2011, 1), (2026, 12), self.table)
+        self.assertEqual(result.reason, "No CPI is published for 2026-12.")
+
+    def test_a_table_without_months_never_adjusts(self):
+        result = inflation.adjust_between_months(Decimal(100), (2011, 1), (2021, 1), fixture_table())
+        self.assertEqual(result.status, STATUS_NOT_ADJUSTED)
+
+
+class LatestTwelveMonthsTests(SimpleTestCase):
+    """latest_trailing_cpi and adjust_to_latest_months."""
+
+    def test_averages_the_latest_twelve_consecutive_months(self):
+        trailing = inflation.latest_trailing_cpi(fixture_table_with_recent_months())
+        self.assertEqual(trailing.value, Decimal("128.75"))
+        self.assertEqual(trailing.first_period, "2025-10")
+        self.assertEqual(trailing.last_period, "2026-09")
+
+    def test_the_label_names_the_months(self):
+        trailing = inflation.latest_trailing_cpi(fixture_table_with_recent_months())
+        self.assertEqual(trailing.label, "the 12 months from 2025-10 to 2026-09")
+        self.assertEqual(trailing.as_dict()["value"], "128.7500")
+
+    def test_a_gap_in_the_latest_months_gives_none(self):
+        self.assertIsNone(inflation.latest_trailing_cpi(fixture_table_with_months()))
+
+    def test_no_months_gives_none(self):
+        self.assertIsNone(inflation.latest_trailing_cpi(fixture_table()))
+
+    def test_a_complete_final_year_is_its_own_latest_twelve_months(self):
+        rows = months_for(2021, [120] * 12)
+        table = CpiTable(years=inflation.annual_cpi_from_months(rows), months=inflation.months_by_period(rows))
+        trailing = inflation.latest_trailing_cpi(table)
+        self.assertEqual(trailing.value, Decimal(120))
+        self.assertEqual(trailing.first_period, "2021-01")
+
+    def test_converts_into_dollars_of_the_latest_twelve_months(self):
+        result, trailing = inflation.adjust_to_latest_months(Decimal(1000), 2011, fixture_table_with_recent_months())
+        self.assertEqual(result.status, STATUS_ADJUSTED)
+        self.assertEqual(result.adjusted_value, Decimal("1287.5"))
+        self.assertEqual(result.to_year, 2026)
+        self.assertEqual(trailing.last_period, "2026-09")
+
+    def test_an_incomplete_starting_year_is_not_adjusted(self):
+        result, trailing = inflation.adjust_to_latest_months(Decimal(1000), 2015, fixture_table_with_recent_months())
+        self.assertEqual(result.status, STATUS_NOT_ADJUSTED)
+        self.assertIn("11 of 12 months", result.reason)
+        self.assertIsNotNone(trailing)
+
+    def test_without_recent_months_nothing_is_adjusted(self):
+        result, trailing = inflation.adjust_to_latest_months(Decimal(1000), 2011, fixture_table_with_months())
+        self.assertEqual(result.status, STATUS_NOT_ADJUSTED)
+        self.assertIn("twelve consecutive", result.reason)
+        self.assertIsNone(trailing)
+
+    def test_table_as_dict_reports_the_latest_months_or_none(self):
+        self.assertIsNone(inflation.latest_twelve_months_dict(fixture_table()))
+        self.assertEqual(inflation.latest_twelve_months_dict(fixture_table_with_recent_months())["last_period"], "2026-09")
+
+
+class RatesAndIndexTests(SimpleTestCase):
+    """annualized_inflation, year_over_year and rebase."""
+
+    def setUp(self):
+        self.table = fixture_table()
+
+    def test_average_yearly_rate_compounds(self):
+        rate = inflation.annualized_inflation(2011, 2021, self.table)
+        self.assertAlmostEqual(float(rate), 1.8399, places=3)
+        self.assertLess(rate, Decimal(2))
+
+    def test_average_yearly_rate_backwards_is_negative(self):
+        rate = inflation.annualized_inflation(2021, 2011, self.table)
+        self.assertLess(rate, 0)
+        self.assertAlmostEqual(float(rate), -1.8067, places=3)
+
+    def test_average_yearly_rate_for_the_same_year_is_zero(self):
+        self.assertEqual(inflation.annualized_inflation(2016, 2016, self.table), Decimal(0))
+
+    def test_average_yearly_rate_is_unknown_without_cpi(self):
+        self.assertIsNone(inflation.annualized_inflation(2011, 2026, self.table))
+
+    def test_year_over_year_needs_the_previous_year(self):
+        rows = inflation.year_over_year(self.table)
+        self.assertEqual([row["year"] for row in rows], [2011, 2016, 2021])
+        self.assertTrue(all(row["inflation_percent"] is None for row in rows))
+
+    def test_year_over_year_for_consecutive_years(self):
+        table = CpiTable(years=inflation.annual_cpi_from_months(
+            months_for(2020, [100] * 12) + months_for(2021, [103] * 12) + months_for(2022, [109.18] * 12)))
+        rows = inflation.year_over_year(table)
+        self.assertEqual(rows[0]["inflation_percent"], None)
+        self.assertEqual(rows[1]["inflation_percent"], "3.00")
+        self.assertEqual(rows[2]["inflation_percent"], "6.00")
+        self.assertEqual(rows[1]["annual_cpi"], "103.0000")
+
+    def test_rebase_makes_the_base_year_100(self):
+        rebased = inflation.rebase(self.table, 2011)
+        self.assertEqual(rebased[2011], Decimal(100))
+        self.assertEqual(rebased[2021], Decimal(120))
+
+    def test_rebase_to_a_later_year(self):
+        rebased = inflation.rebase(self.table, 2021)
+        self.assertAlmostEqual(float(rebased[2011]), 83.3333, places=3)
+
+    def test_rebase_only_lists_complete_years(self):
+        self.assertEqual(sorted(inflation.rebase(self.table, 2016)), [2011, 2016, 2021])
+
+    def test_rebase_rejects_a_base_year_without_cpi(self):
+        with self.assertRaisesMessage(InvalidInflationRequest, "2026 cannot be the base year"):
+            inflation.rebase(self.table, 2026)
+
+
+class CensusReferenceYearTests(SimpleTestCase):
+    """census_reference_year and adjust_census_value."""
+
+    def test_census_income_refers_to_the_year_before(self):
+        self.assertEqual(inflation.census_reference_year(2021, "income"), 2020)
+        self.assertEqual(inflation.census_reference_year(2021, "after_tax_income"), 2020)
+
+    def test_shelter_cost_and_rent_refer_to_the_census_year(self):
+        self.assertEqual(inflation.census_reference_year(2021, "shelter_cost"), 2021)
+        self.assertEqual(inflation.census_reference_year(2016, "rent"), 2016)
+
+    def test_rejects_an_unknown_measure_and_lists_the_known_ones(self):
+        with self.assertRaisesMessage(InvalidInflationRequest, "after_tax_income, income, rent, shelter_cost"):
+            inflation.census_reference_year(2021, "height")
+
+    def test_adjusts_income_from_its_reference_year(self):
+        result = inflation.adjust_census_value(Decimal(1100), 2017, "income", 2021, fixture_table())
+        self.assertEqual(result.from_year, 2016)
+        self.assertEqual(result.adjusted_value, Decimal(1200))
+
+    def test_adjusts_shelter_cost_from_the_census_year(self):
+        result = inflation.adjust_census_value(Decimal(1000), 2011, "shelter_cost", 2021, fixture_table())
+        self.assertEqual(result.adjusted_value, Decimal(1200))
+
+    def test_income_whose_reference_year_has_no_cpi_is_not_adjusted(self):
+        result = inflation.adjust_census_value(Decimal(1000), 2011, "income", 2021, fixture_table())
+        self.assertEqual(result.status, STATUS_NOT_ADJUSTED)
+        self.assertIn("2010", result.reason)
+
+
+class SeriesTests(SimpleTestCase):
+    """parse_series and adjust_series."""
+
+    def test_reads_year_amount_pairs(self):
+        self.assertEqual(inflation.parse_series("2011:1000, 2021:1300"),
+                         [(2011, Decimal(1000)), (2021, Decimal(1300))])
+
+    def test_skips_empty_items(self):
+        self.assertEqual(inflation.parse_series("2011:1000,,"), [(2011, Decimal(1000))])
+
+    def test_rejects_missing_or_empty_input(self):
+        for raw in [None, "", " ", ",,"]:
+            with self.subTest(raw=raw):
+                with self.assertRaisesMessage(InvalidInflationRequest, "Missing values"):
+                    inflation.parse_series(raw)
+
+    def test_rejects_an_item_without_one_colon(self):
+        for raw in ["2011-1000", "2011:1000:5"]:
+            with self.subTest(raw=raw):
+                with self.assertRaisesMessage(InvalidInflationRequest, "YEAR:AMOUNT"):
+                    inflation.parse_series(raw)
+
+    def test_rejects_a_repeated_year(self):
+        with self.assertRaisesMessage(InvalidInflationRequest, "2011 appears more than once"):
+            inflation.parse_series("2011:1000,2011:1100")
+
+    def test_rejects_bad_years_and_amounts(self):
+        with self.assertRaises(InvalidInflationRequest):
+            inflation.parse_series("20x1:1000")
+        with self.assertRaises(InvalidInflationRequest):
+            inflation.parse_series("2011:-5")
+
+    def test_rejects_more_than_fifty_values(self):
+        raw = ",".join(f"{1950 + i}:100" for i in range(51))
+        with self.assertRaisesMessage(InvalidInflationRequest, "at most 50"):
+            inflation.parse_series(raw)
+
+    def test_adjust_series_sorts_and_converts_each_value(self):
+        results = inflation.adjust_series([(2021, Decimal(1300)), (2011, Decimal(1000))], 2021, fixture_table())
+        self.assertEqual([r.from_year for r in results], [2011, 2021])
+        self.assertEqual([r.status for r in results], [STATUS_ADJUSTED, STATUS_SAME_YEAR])
+        self.assertEqual(results[0].adjusted_value, Decimal(1200))
+
+    def test_adjust_series_keeps_values_it_cannot_convert(self):
+        results = inflation.adjust_series([(2015, Decimal(1000))], 2021, fixture_table())
+        self.assertEqual(results[0].status, STATUS_NOT_ADJUSTED)
+
+
+class AffordabilityTrendTests(SimpleTestCase):
+    """affordability_point, parse_affordability_points and affordability_trend."""
+
+    def setUp(self):
+        self.table = fixture_table()
+
+    def test_share_of_income_at_the_guideline(self):
+        point = inflation.affordability_point(2021, Decimal(1500), Decimal(60000))
+        self.assertEqual(point.share_of_income_percent, Decimal(30))
+        self.assertTrue(point.meets_guideline)
+
+    def test_share_of_income_over_the_guideline(self):
+        point = inflation.affordability_point(2021, Decimal(2300), Decimal(72000))
+        self.assertAlmostEqual(float(point.share_of_income_percent), 38.333, places=2)
+        self.assertFalse(point.meets_guideline)
+
+    def test_zero_income_has_no_share(self):
+        point = inflation.affordability_point(2021, Decimal(1000), Decimal(0))
+        self.assertIsNone(point.share_of_income_percent)
+        self.assertIsNone(point.meets_guideline)
+
+    def test_parses_and_sorts_points(self):
+        triples = inflation.parse_affordability_points("2021:1300:72000,2011:1000:60000")
+        self.assertEqual([t[0] for t in triples], [2011, 2021])
+
+    def test_rejects_badly_formed_points(self):
+        for raw in [None, "", "2011:1000", "2011:1000:60000:1"]:
+            with self.subTest(raw=raw):
+                with self.assertRaises(InvalidInflationRequest):
+                    inflation.parse_affordability_points(raw)
+
+    def test_needs_at_least_two_years(self):
+        with self.assertRaisesMessage(InvalidInflationRequest, "at least two years"):
+            inflation.parse_affordability_points("2011:1000:60000")
+
+    def test_rejects_a_repeated_year(self):
+        with self.assertRaisesMessage(InvalidInflationRequest, "appears more than once"):
+            inflation.parse_affordability_points("2011:1000:60000,2011:1100:61000")
+
+    def test_rejects_more_than_fifty_points(self):
+        raw = ",".join(f"{1950 + i}:100:1000" for i in range(51))
+        with self.assertRaisesMessage(InvalidInflationRequest, "at most 50"):
+            inflation.parse_affordability_points(raw)
+
+    def test_rent_taking_a_larger_share_of_income(self):
+        trend = inflation.affordability_trend(
+            [(2011, Decimal(1000), Decimal(60000)), (2021, Decimal(1300), Decimal(72000))], self.table)
+        self.assertEqual(trend["share_change_points"], "1.67")
+        self.assertTrue(trend["rent_outpaced_income"])
+        self.assertEqual(trend["rent_change"]["real_change_percent"], "8.33")
+        self.assertEqual(trend["income_change"]["real_change_percent"], "0.00")
+        self.assertEqual(trend["summary"],
+                         "Rent took a larger share of income in 2021 than in 2011 (up 1.7 percentage points).")
+
+    def test_rent_taking_a_smaller_share_of_income(self):
+        trend = inflation.affordability_trend(
+            [(2011, Decimal(1000), Decimal(60000)), (2021, Decimal(1100), Decimal(80000))], self.table)
+        self.assertFalse(trend["rent_outpaced_income"])
+        self.assertIn("smaller share", trend["summary"])
+
+    def test_rent_taking_the_same_share_of_income(self):
+        trend = inflation.affordability_trend(
+            [(2011, Decimal(1000), Decimal(60000)), (2021, Decimal(1200), Decimal(72000))], self.table)
+        self.assertEqual(trend["share_change_points"], "0.00")
+        self.assertEqual(trend["summary"], "Rent took the same share of income in 2011 and 2021.")
+
+    def test_a_zero_income_cannot_be_compared(self):
+        trend = inflation.affordability_trend(
+            [(2011, Decimal(1000), Decimal(0)), (2021, Decimal(1200), Decimal(72000))], self.table)
+        self.assertIsNone(trend["share_change_points"])
+        self.assertIn("cannot be compared", trend["summary"])
+
+    def test_lists_every_point_and_the_guideline(self):
+        trend = inflation.affordability_trend(
+            [(2011, Decimal(1000), Decimal(60000)), (2016, Decimal(1100), Decimal(66000)),
+             (2021, Decimal(1300), Decimal(72000))], self.table)
+        self.assertEqual([p["year"] for p in trend["points"]], [2011, 2016, 2021])
+        self.assertEqual(trend["guideline_percent"], "30")
+        self.assertEqual(trend["first_year"], 2011)
+        self.assertEqual(trend["last_year"], 2021)
+
+    def test_a_year_without_cpi_keeps_the_share_but_not_the_real_change(self):
+        trend = inflation.affordability_trend(
+            [(2011, Decimal(1000), Decimal(60000)), (2026, Decimal(1500), Decimal(80000))], self.table)
+        self.assertIsNotNone(trend["share_change_points"])
+        self.assertIsNone(trend["rent_change"]["real_change_percent"])
+
+
+# --------------------------------------------------------------------------- deeper endpoints
+
+class DeeperEndpointTests(CpiDatabaseMixin, TestCase):
+    """The convert-month, latest, series, rates, census-adjust and affordability-trend endpoints."""
+
+    def add_2025(self):
+        create_cpi_rows(self.source, months_for(2025, [125] * 12))
+
+    def test_convert_month(self):
+        data = self.client.get("/api/cpi/convert-month/",
+                               {"amount": "1000", "from_period": "2011-05", "to_period": "2021-05"}).json()
+        self.assertEqual(data["adjusted_value"], "1200.00")
+        self.assertEqual(data["from_period"], "2011-05")
+        self.assertEqual(data["to_period"], "2021-05")
+
+    def test_convert_month_rejects_bad_periods(self):
+        response = self.client.get("/api/cpi/convert-month/",
+                                   {"amount": "1000", "from_period": "May 2011", "to_period": "2021-05"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("from_period", response.json()["error"])
+
+    def test_latest_without_recent_months_is_not_adjusted(self):
+        data = self.client.get("/api/cpi/latest/", {"amount": "1000", "from_year": "2011"}).json()
+        self.assertEqual(data["status"], "not_adjusted")
+        self.assertIsNone(data["latest_twelve_months"])
+
+    def test_latest_with_recent_months(self):
+        self.add_2025()
+        data = self.client.get("/api/cpi/latest/", {"amount": "1000", "from_year": "2011"}).json()
+        self.assertEqual(data["adjusted_value"], "1287.50")
+        self.assertEqual(data["latest_twelve_months"]["label"], "the 12 months from 2025-10 to 2026-09")
+        self.assertIn("not a calendar-year CPI", data["note"])
+
+    def test_annual_endpoint_reports_the_latest_months(self):
+        self.add_2025()
+        data = self.client.get("/api/cpi/annual/").json()
+        self.assertEqual(data["latest_twelve_months"]["value"], "128.7500")
+
+    def test_latest_rejects_bad_input(self):
+        self.assertEqual(self.client.get("/api/cpi/latest/", {"amount": "x", "from_year": "2011"}).status_code, 400)
+
+    def test_series(self):
+        data = self.client.get("/api/cpi/series/", {"values": "2011:1000,2016:1100,2026:1500", "to_year": "2021"}).json()
+        self.assertEqual([v["adjusted_value"] for v in data["values"]], ["1200.00", "1200.00", None])
+        self.assertEqual(data["adjusted_count"], 2)
+        self.assertEqual(data["not_adjusted_count"], 1)
+
+    def test_series_rejects_bad_input(self):
+        self.assertEqual(self.client.get("/api/cpi/series/", {"values": "2011", "to_year": "2021"}).status_code, 400)
+        self.assertEqual(self.client.get("/api/cpi/series/", {"values": "2011:1000"}).status_code, 400)
+
+    def test_rates_lists_year_over_year(self):
+        data = self.client.get("/api/cpi/rates/").json()
+        self.assertEqual([row["year"] for row in data["year_over_year"]], [2011, 2016, 2021])
+        self.assertNotIn("between", data)
+        self.assertNotIn("rebased", data)
+
+    def test_rates_between_two_years(self):
+        data = self.client.get("/api/cpi/rates/", {"from_year": "2011", "to_year": "2021"}).json()
+        self.assertEqual(data["between"]["total_inflation_percent"], "20.00")
+        self.assertEqual(data["between"]["average_yearly_inflation_percent"], "1.84")
+        self.assertIsNone(data["between"]["reason"])
+
+    def test_rates_between_years_explains_a_missing_year(self):
+        data = self.client.get("/api/cpi/rates/", {"from_year": "2011", "to_year": "2026"}).json()
+        self.assertIsNone(data["between"]["average_yearly_inflation_percent"])
+        self.assertIn("9 of 12 months", data["between"]["reason"])
+        data = self.client.get("/api/cpi/rates/", {"from_year": "2015", "to_year": "2021"}).json()
+        self.assertIn("11 of 12 months", data["between"]["reason"])
+
+    def test_rates_rebased(self):
+        data = self.client.get("/api/cpi/rates/", {"base_year": "2011"}).json()
+        self.assertEqual(data["rebased"]["index"][-1], {"year": 2021, "value": "120.00"})
+
+    def test_rates_rejects_half_a_range_and_bad_bases(self):
+        self.assertEqual(self.client.get("/api/cpi/rates/", {"from_year": "2011"}).status_code, 400)
+        self.assertEqual(self.client.get("/api/cpi/rates/", {"base_year": "2026"}).status_code, 400)
+        self.assertEqual(self.client.get("/api/cpi/rates/", {"base_year": "soon"}).status_code, 400)
+
+    def test_census_adjust(self):
+        data = self.client.get("/api/cpi/census-adjust/",
+                               {"amount": "1100", "census_year": "2017", "measure": "income", "to_year": "2021"}).json()
+        self.assertEqual(data["reference_year"], 2016)
+        self.assertEqual(data["adjusted_value"], "1200.00")
+        self.assertEqual(data["measure"], "income")
+
+    def test_census_adjust_rejects_unknown_measures(self):
+        response = self.client.get("/api/cpi/census-adjust/",
+                                   {"amount": "1", "census_year": "2021", "measure": "height", "to_year": "2021"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unknown Census measure", response.json()["error"])
+
+    def test_affordability_trend(self):
+        data = self.client.get("/api/cpi/affordability-trend/", {"points": "2011:1000:60000,2021:1300:72000"}).json()
+        self.assertTrue(data["rent_outpaced_income"])
+        self.assertEqual(data["share_change_points"], "1.67")
+        self.assertEqual(data["source"]["id"], "cpi-test")
+
+    def test_affordability_trend_rejects_bad_points(self):
+        self.assertEqual(self.client.get("/api/cpi/affordability-trend/", {"points": "2011:1000:60000"}).status_code, 400)
+
+
+class DeeperEndpointsWithoutCpiTests(TestCase):
+    """Every new endpoint answers 503 when CPI is not loaded."""
+
+    def test_each_endpoint_answers_503(self):
+        for url, params in [
+            ("/api/cpi/convert-month/", {"amount": "1", "from_period": "2011-01", "to_period": "2021-01"}),
+            ("/api/cpi/latest/", {"amount": "1", "from_year": "2011"}),
+            ("/api/cpi/series/", {"values": "2011:1", "to_year": "2021"}),
+            ("/api/cpi/rates/", {}),
+            ("/api/cpi/census-adjust/", {"amount": "1", "census_year": "2021", "measure": "rent", "to_year": "2021"}),
+            ("/api/cpi/affordability-trend/", {"points": "2011:1:1,2021:1:1"}),
+        ]:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url, params).status_code, 503)
+
+
+class CpiInventoryDeeperTests(CpiDatabaseMixin, TestCase):
+    """cpi_inventory's year-over-year column, latest months and --base-year."""
+
+    def run_command(self, *args):
+        out = StringIO()
+        call_command("cpi_inventory", *args, stdout=out)
+        return out.getvalue()
+
+    def test_shows_a_change_column(self):
+        self.assertIn("Change", self.run_command())
+
+    def test_shows_when_the_latest_months_are_not_available(self):
+        self.assertIn("Latest 12 months: not available", self.run_command())
+
+    def test_shows_the_latest_months(self):
+        create_cpi_rows(self.source, months_for(2025, [125] * 12))
+        output = self.run_command()
+        self.assertIn("Latest 12 months: 2025-10 to 2026-09, average 128.75", output)
+
+    def test_shows_a_rebased_index(self):
+        output = self.run_command("--base-year", "2011")
+        self.assertIn("CPI with 2011 = 100", output)
+        self.assertIn("120.00", output)
+
+    def test_rejects_a_base_year_without_cpi(self):
+        with self.assertRaisesMessage(CommandError, "cannot be the base year"):
+            self.run_command("--base-year", "2026")

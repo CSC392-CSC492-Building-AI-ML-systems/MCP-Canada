@@ -10,6 +10,18 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  AFFORDABILITY_GUIDELINE_PERCENT,
+  CENSUS_REFERENCE_OFFSETS,
+  adjustCensusValue,
+  adjustToLatestMonths,
+  affordabilityPoint,
+  affordabilityTrend,
+  annualizedInflation,
+  applyDollarBasis,
+  basisNote,
+  censusReferenceYear,
+  rebaseCpi,
+  yearOverYear,
   ADJUSTMENT_NOTE,
   CPI_ANNUAL_URL,
   NOMINAL_BASIS,
@@ -578,5 +590,317 @@ describe("loadAnnualCpi", () => {
     await expect(loadAnnualCpi(fakeFetch({}, 500) as unknown as typeof fetch)).rejects.toThrow();
     const t = await loadAnnualCpi(fakeFetch(RESPONSE) as unknown as typeof fetch);
     expect(t.latestCompleteYear).toBe(2021);
+  });
+});
+
+// ================================================================== deeper calculations
+
+const LATEST = { value: "128.75", first_period: "2025-10", last_period: "2026-09", label: "the 12 months from 2025-10 to 2026-09" };
+const tableWithLatest = (): CpiTable => buildCpiTable({ ...RESPONSE, latest_twelve_months: LATEST });
+
+describe("latest twelve months", () => {
+  describe("reading the backend block", () => {
+    it("keeps a valid block", () => {
+      expect(tableWithLatest().latestTwelveMonths).toEqual({
+        value: 128.75, firstPeriod: "2025-10", lastPeriod: "2026-09", label: "the 12 months from 2025-10 to 2026-09",
+      });
+    });
+
+    it("is null when the backend sends none", () => {
+      expect(table().latestTwelveMonths).toBeNull();
+      expect(buildCpiTable({ ...RESPONSE, latest_twelve_months: null }).latestTwelveMonths).toBeNull();
+    });
+
+    it.each(["0", "-1", "abc", "Infinity"])("ignores a block whose value is %s", (value) => {
+      expect(buildCpiTable({ ...RESPONSE, latest_twelve_months: { ...LATEST, value } }).latestTwelveMonths).toBeNull();
+    });
+
+    it("ignores a block without its periods", () => {
+      const broken = { ...LATEST, first_period: undefined } as unknown as typeof LATEST;
+      expect(buildCpiTable({ ...RESPONSE, latest_twelve_months: broken }).latestTwelveMonths).toBeNull();
+    });
+
+    it("writes its own label when the backend sends none", () => {
+      const noLabel = { ...LATEST, label: undefined } as unknown as typeof LATEST;
+      expect(buildCpiTable({ ...RESPONSE, latest_twelve_months: noLabel }).latestTwelveMonths?.label)
+        .toBe("the 12 months from 2025-10 to 2026-09");
+    });
+  });
+
+  describe("adjustToLatestMonths", () => {
+    it("converts a complete year into dollars of the latest twelve months", () => {
+      const result = adjustToLatestMonths(1000, 2011, tableWithLatest());
+      expect(result.status).toBe("adjusted");
+      expect(result.value).toBeCloseTo(1287.5, 10);
+      expect(result.toYear).toBe(2026);
+      expect(result.period?.label).toBe("the 12 months from 2025-10 to 2026-09");
+    });
+
+    it("is not adjusted without the latest-months block", () => {
+      const result = adjustToLatestMonths(1000, 2011, table());
+      expect(result.status).toBe("not_adjusted");
+      expect(result.reason).toBe("The loaded CPI does not have twelve consecutive recent months.");
+      expect(result.toYear).toBe(2011);
+    });
+
+    it("is not adjusted from an incomplete year", () => {
+      expect(adjustToLatestMonths(1000, 2015, tableWithLatest()).reason).toContain("11 of 12 months");
+    });
+
+    it.each([null, undefined, -1, Number.NaN])("does not convert the amount %s", (amount) => {
+      expect(adjustToLatestMonths(amount, 2011, tableWithLatest()).reason).toBe("There is no usable amount to convert.");
+    });
+  });
+});
+
+describe("Census reference years", () => {
+  it("income in a Census refers to the year before", () => {
+    expect(censusReferenceYear(2021, "income")).toBe(2020);
+    expect(censusReferenceYear(2021, "after_tax_income")).toBe(2020);
+  });
+
+  it("shelter cost and rent refer to the Census year", () => {
+    expect(censusReferenceYear(2021, "shelter_cost")).toBe(2021);
+    expect(censusReferenceYear(2016, "rent")).toBe(2016);
+  });
+
+  it("covers every measure with an offset of 0 or -1", () => {
+    for (const offset of Object.values(CENSUS_REFERENCE_OFFSETS)) {
+      expect([0, -1]).toContain(offset);
+    }
+  });
+
+  it("adjusts income from its reference year", () => {
+    const result = adjustCensusValue(1100, 2017, "income", 2021, table());
+    expect(result.fromYear).toBe(2016);
+    expect(result.value).toBeCloseTo(1200, 10);
+  });
+
+  it("adjusts shelter cost from the Census year", () => {
+    expect(adjustCensusValue(1000, 2011, "shelter_cost", 2021, table()).value).toBeCloseTo(1200, 10);
+  });
+
+  it("does not adjust income whose reference year has no CPI", () => {
+    const result = adjustCensusValue(1000, 2011, "income", 2021, table());
+    expect(result.status).toBe("not_adjusted");
+    expect(result.reason).toContain("2010");
+  });
+});
+
+describe("annualizedInflation", () => {
+  it("compounds: 20% over 10 years is about 1.84% a year", () => {
+    expect(annualizedInflation(2011, 2021, table())).toBeCloseTo(1.8399, 3);
+  });
+
+  it("going back in time gives a negative rate", () => {
+    expect(annualizedInflation(2021, 2011, table())).toBeCloseTo(-1.8067, 3);
+  });
+
+  it("the same year is 0", () => {
+    expect(annualizedInflation(2016, 2016, table())).toBe(0);
+  });
+
+  it.each([[2011, 2026], [1999, 2021], [2011.5, 2021]])("is unknown from %s to %s", (from, to) => {
+    expect(annualizedInflation(from, to, table())).toBeNull();
+  });
+});
+
+describe("yearOverYear", () => {
+  it("is unknown when the previous year is missing", () => {
+    expect(yearOverYear(table()).map(r => r.inflationPercent)).toEqual([null, null, null]);
+  });
+
+  it("compares consecutive complete years", () => {
+    const t = buildCpiTable({ years: [
+      { year: 2020, value: "100", months_counted: 12, status: "complete" },
+      { year: 2021, value: "103", months_counted: 12, status: "complete" },
+      { year: 2022, value: "109.18", months_counted: 12, status: "complete" },
+    ] });
+    const rows = yearOverYear(t);
+    expect(rows.map(r => r.year)).toEqual([2020, 2021, 2022]);
+    expect(rows[0].inflationPercent).toBeNull();
+    expect(rows[1].inflationPercent).toBeCloseTo(3, 10);
+    expect(rows[2].inflationPercent).toBeCloseTo(6, 10);
+    expect(rows[1].annualCpi).toBe(103);
+  });
+
+  it("is empty for an empty table", () => {
+    expect(yearOverYear(buildCpiTable({ years: [] }))).toEqual([]);
+  });
+});
+
+describe("rebaseCpi", () => {
+  it("makes the base year 100", () => {
+    const rebased = rebaseCpi(table(), 2011)!;
+    expect(rebased.get(2011)).toBe(100);
+    expect(rebased.get(2021)).toBeCloseTo(120, 10);
+  });
+
+  it("works with a later base year", () => {
+    expect(rebaseCpi(table(), 2021)!.get(2011)).toBeCloseTo(83.3333, 3);
+  });
+
+  it("lists only complete years", () => {
+    expect([...rebaseCpi(table(), 2016)!.keys()]).toEqual([2011, 2016, 2021]);
+  });
+
+  it("is null for a base year without CPI", () => {
+    expect(rebaseCpi(table(), 2026)).toBeNull();
+  });
+});
+
+describe("affordability over time", () => {
+  describe("affordabilityPoint", () => {
+    it("rent at 30% of income meets the guideline", () => {
+      const point = affordabilityPoint({ year: 2021, monthlyRent: 1500, annualIncome: 60000 });
+      expect(point.shareOfIncomePercent).toBeCloseTo(30, 10);
+      expect(point.meetsGuideline).toBe(true);
+    });
+
+    it("the project plan example is over the guideline", () => {
+      const point = affordabilityPoint({ year: 2021, monthlyRent: 2300, annualIncome: 72000 });
+      expect(point.shareOfIncomePercent).toBeCloseTo(38.333, 2);
+      expect(point.meetsGuideline).toBe(false);
+    });
+
+    it.each([
+      [1000, 0], [1000, null], [null, 60000], [-1, 60000], [1000, Number.NaN],
+    ])("has no share for rent %s and income %s", (monthlyRent, annualIncome) => {
+      const point = affordabilityPoint({ year: 2021, monthlyRent, annualIncome });
+      expect(point.shareOfIncomePercent).toBeNull();
+      expect(point.meetsGuideline).toBeNull();
+    });
+
+    it("uses the 30% guideline", () => {
+      expect(AFFORDABILITY_GUIDELINE_PERCENT).toBe(30);
+    });
+  });
+
+  describe("affordabilityTrend", () => {
+    it("rent taking a larger share of income", () => {
+      const trend = affordabilityTrend([
+        { year: 2011, monthlyRent: 1000, annualIncome: 60000 },
+        { year: 2021, monthlyRent: 1300, annualIncome: 72000 },
+      ], table());
+      expect(trend.shareChangePoints).toBeCloseTo(1.6667, 3);
+      expect(trend.rentOutpacedIncome).toBe(true);
+      expect(trend.rentChange?.realPercent).toBeCloseTo(8.3333, 3);
+      expect(trend.incomeChange?.realPercent).toBeCloseTo(0, 10);
+      expect(trend.summary).toBe("Rent took a larger share of income in 2021 than in 2011 (up 1.7 percentage points).");
+    });
+
+    it("rent taking a smaller share of income", () => {
+      const trend = affordabilityTrend([
+        { year: 2011, monthlyRent: 1000, annualIncome: 60000 },
+        { year: 2021, monthlyRent: 1100, annualIncome: 80000 },
+      ], table());
+      expect(trend.rentOutpacedIncome).toBe(false);
+      expect(trend.summary).toContain("smaller share");
+    });
+
+    it("rent taking the same share of income", () => {
+      const trend = affordabilityTrend([
+        { year: 2011, monthlyRent: 1000, annualIncome: 60000 },
+        { year: 2021, monthlyRent: 1200, annualIncome: 72000 },
+      ], table());
+      expect(trend.summary).toBe("Rent took the same share of income in 2011 and 2021.");
+    });
+
+    it("sorts the points by year", () => {
+      const trend = affordabilityTrend([
+        { year: 2021, monthlyRent: 1300, annualIncome: 72000 },
+        { year: 2011, monthlyRent: 1000, annualIncome: 60000 },
+      ], table());
+      expect(trend.points.map(p => p.year)).toEqual([2011, 2021]);
+      expect(trend.firstYear).toBe(2011);
+      expect(trend.lastYear).toBe(2021);
+    });
+
+    it("compares the first and last years that have both rent and income", () => {
+      const trend = affordabilityTrend([
+        { year: 2006, monthlyRent: null, annualIncome: 50000 },
+        { year: 2011, monthlyRent: 1000, annualIncome: 60000 },
+        { year: 2021, monthlyRent: 1300, annualIncome: 72000 },
+      ], table());
+      expect(trend.firstYear).toBe(2011);
+      expect(trend.points).toHaveLength(3);
+    });
+
+    it("needs at least two usable years", () => {
+      const trend = affordabilityTrend([{ year: 2011, monthlyRent: 1000, annualIncome: 60000 }], table());
+      expect(trend.shareChangePoints).toBeNull();
+      expect(trend.rentChange).toBeNull();
+      expect(trend.firstYear).toBe(2011);
+      expect(trend.summary).toBe("At least two years with both rent and income are needed to show a trend.");
+    });
+
+    it("an empty list has no trend", () => {
+      const trend = affordabilityTrend([], table());
+      expect(trend.firstYear).toBeNull();
+      expect(trend.lastYear).toBeNull();
+    });
+
+    it("a year without CPI keeps the share but not the real change", () => {
+      const trend = affordabilityTrend([
+        { year: 2011, monthlyRent: 1000, annualIncome: 60000 },
+        { year: 2026, monthlyRent: 1500, annualIncome: 80000 },
+      ], table());
+      expect(trend.shareChangePoints).not.toBeNull();
+      expect(trend.rentChange?.realPercent).toBeNull();
+      expect(trend.rentOutpacedIncome).toBe(true);
+    });
+  });
+});
+
+describe("applyDollarBasis", () => {
+  const series = [
+    { year: 2011, value: 1000 },
+    { year: 2015, value: 1050 },
+    { year: 2021, value: 1300 },
+    { year: 2016, value: null },
+  ];
+  const nominal = { id: NOMINAL_BASIS, label: "As published", year: null };
+  const in2021 = { id: "2021", label: "In 2021 dollars", year: 2021 };
+
+  it("shows everything as published with the nominal basis", () => {
+    const shown = applyDollarBasis(series, nominal, table());
+    expect(shown.map(v => v.shown)).toEqual([1000, 1050, 1300, null]);
+    expect(shown.every(v => !v.adjusted && v.note === null)).toBe(true);
+    expect(shown[0].label).toBe("2011 dollars");
+  });
+
+  it("converts values with a year basis", () => {
+    const shown = applyDollarBasis(series, in2021, table());
+    expect(shown[0].shown).toBeCloseTo(1200, 10);
+    expect(shown[0].adjusted).toBe(true);
+    expect(shown[0].original).toBe(1000);
+    expect(shown[0].label).toBe("Adjusted to 2021 dollars");
+  });
+
+  it("shows a value it cannot convert as published, with a note", () => {
+    const shown = applyDollarBasis(series, in2021, table())[1];
+    expect(shown.shown).toBe(1050);
+    expect(shown.adjusted).toBe(false);
+    expect(shown.note).toContain("11 of 12 months");
+    expect(shown.label).toBe("2015 dollars, not adjusted");
+  });
+
+  it("keeps a missing value missing, without a note", () => {
+    const shown = applyDollarBasis(series, in2021, table())[3];
+    expect(shown.shown).toBeNull();
+    expect(shown.note).toBeNull();
+  });
+
+  it("a value already in the basis year is shown unchanged and not marked adjusted", () => {
+    const shown = applyDollarBasis(series, in2021, table())[2];
+    expect(shown.shown).toBe(1300);
+    expect(shown.adjusted).toBe(false);
+    expect(shown.label).toBe("2021 dollars");
+  });
+
+  it("basisNote picks the CPI note only when something was adjusted", () => {
+    expect(basisNote(applyDollarBasis(series, in2021, table()))).toBe(ADJUSTMENT_NOTE);
+    expect(basisNote(applyDollarBasis(series, nominal, table()))).toBe(NOMINAL_NOTE);
+    expect(basisNote([])).toBe(NOMINAL_NOTE);
   });
 });
