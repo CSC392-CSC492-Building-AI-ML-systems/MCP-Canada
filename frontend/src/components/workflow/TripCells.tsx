@@ -21,6 +21,7 @@ export function tripNote(trip: Trip, state: TripState): string {
 /** One place's travel time with its route and how it compares with the user's limit. */
 export function TripValue({ state, id, limit }: { state: TripState; id: string; limit?: number }) {
   if (state.status === "loading") return <>…</>;
+  if (state.status === "no-destination") return <>Address needed</>;
   if (state.status !== "ready") return <>—</>;
   const c = state.result.byId[id];
   if (!c || c.minutes === null) return <>—{c?.reason && <small>{c.reason}</small>}</>;

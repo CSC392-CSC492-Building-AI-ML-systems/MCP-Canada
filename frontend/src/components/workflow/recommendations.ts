@@ -30,7 +30,7 @@ export function rankByMatch(candidates: Candidate[], profile: SearchProfile, lim
 }
 
 function placeSummary(cost: number | null, budget: number, breakdown: Breakdown) {
-  const parts = [cost === null ? "Rent unavailable" : `$${cost.toLocaleString("en-CA")} / mo. · ${cost <= budget ? "within" : "above"} your budget`];
+  const parts = [cost === null ? "Rent unavailable" : `$${cost.toLocaleString("en-CA")} / mo.${budget > 0 ? ` · ${cost <= budget ? "within" : "above"} your budget` : ""}`];
   if (breakdown.flags.includes("commute_over_limit")) parts.push("a trip is over your limit");
   parts.push(`${breakdown.coverage.used} of ${breakdown.coverage.weighted} factors`);
   return parts.join(" · ");

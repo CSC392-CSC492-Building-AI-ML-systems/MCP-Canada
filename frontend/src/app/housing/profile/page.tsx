@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
-import { LIFESTYLE_OPTIONS, PROFILE_KEY, RECOMMENDED_KEY, clearProfile, parseProfile, readSession, subscribeSession, writeSession, type GeoPoint, type SearchProfile } from '@/components/workflow/state';
+import { LIFESTYLE_OPTIONS, PROFILE_KEY, RECOMMENDED_KEY, clearProfile, parseProfile, profileForSave, readSession, safeReturnTo, subscribeSession, writeSession, type GeoPoint, type HeldField, type SearchProfile } from '@/components/workflow/state';
 import AddressField from '@/components/map/AddressField';
 import styles from '../data/profile.module.css';
 
@@ -20,11 +20,40 @@ const money = new Intl.NumberFormat('en-CA', {
   style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
 });
 
+/** Why a field's latest input wasn't saved; its last saved value is still used. */
+const heldMessages: Record<HeldField, string> = {
+  rent: 'max monthly rent (enter an amount above $0; your last saved budget is kept)',
+  income: 'income (enter an amount above $0, or leave it blank)',
+  trip: 'trip length',
+  priorities: 'lifestyle priorities (choose up to 3)',
+  weights: 'factor weights',
+  work: 'work address (choose a suggestion; your previous address is still used)',
+  school: 'school address (choose a suggestion; your previous address is still used)',
+};
+
+/** What an empty form autosaves as, in profileForSave's field order. */
+const BLANK_FORM = JSON.stringify({ version: 1, income: '', rent: '', mode: 'Transit', work: '', school: '', trip: 30, priorities: [], weights: [3, 3, 3, 3, 3, 3], interests: [], notes: '', workPoint: null, schoolPoint: null } satisfies SearchProfile);
+
+/** The last profile this page autosaved, so its own writes don't reset the form mid-edit. */
+let ownWrite: string | null = null;
+/** Saves the profile and remembers it as this page's own write (kept outside the component for the hooks lint rule). */
+function saveOwnProfile(serialized: string) {
+  ownWrite = serialized;
+  writeSession(PROFILE_KEY, serialized);
+}
+const noSubscribe = () => () => {};
+const readReturnTo = () => safeReturnTo(new URLSearchParams(window.location.search).get('returnTo'));
+
 export default function ProfilePage() {
   const raw = useSyncExternalStore(subscribeSession, () => readSession(PROFILE_KEY), () => null);
-  return <ProfileForm key={raw ?? "new"} initial={parseProfile(raw)} />;
+  const returnTo = useSyncExternalStore(noSubscribe, readReturnTo, () => null);
+  // Remount the form only when the stored profile changes from outside it (first load, clear, another tab).
+  const [form, setForm] = useState({ raw, key: 0 });
+  if (raw !== form.raw) setForm({ raw, key: raw !== null && raw === ownWrite ? form.key : form.key + 1 });
+  const saved = parseProfile(raw);
+  return <ProfileForm key={form.key} initial={saved} saved={saved} returnTo={returnTo} />;
 }
-function ProfileForm({ initial }: { initial: SearchProfile | null }) {
+function ProfileForm({ initial, saved, returnTo }: { initial: SearchProfile | null; saved: SearchProfile | null; returnTo: string | null }) {
   const router = useRouter();
   const [sample, setSample] = useState('');
   const [income, setIncome] = useState(initial?.income ?? '');
@@ -41,6 +70,26 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [submitted, setSubmitted] = useState(false);
   const monthly = Number(income) / 12;
+  const draft: SearchProfile = { version: 1, income, rent, mode, work, school, trip, priorities, weights, interests, notes, workPoint, schoolPoint };
+  // Valid fields save as entered; an invalid or half-typed field keeps its last saved value instead.
+  const { profile: toSave, held } = profileForSave(draft, saved);
+  const serialized = JSON.stringify(toSave);
+  const valid = held.length === 0 && parseProfile(serialized) !== null;
+  // Finding neighbourhoods needs a rent budget and no invalid values; an address still being typed doesn't block it.
+  const canSubmit = !!rent.trim() && !held.some(field => field !== 'work' && field !== 'school');
+
+  // Autosave every change so leaving the page (e.g. back to a comparison) keeps your preferences.
+  // An untouched empty form (first visit, or just cleared) isn't saved, so it doesn't count as a profile.
+  useEffect(() => {
+    if (parseProfile(serialized) === null || serialized === readSession(PROFILE_KEY)) return;
+    if (readSession(PROFILE_KEY) === null && serialized === BLANK_FORM) return;
+    saveOwnProfile(serialized);
+  }, [serialized]);
+  const notSaved = held.map(field => heldMessages[field]);
+  const saveStatus = !saved && serialized === BLANK_FORM ? 'Changes save automatically as you fill in your profile.'
+    : notSaved.length ? `✓ Other changes saved. Not saved yet: ${notSaved.join('; ')}.`
+    : !rent.trim() ? '✓ Changes saved automatically. Add a max monthly rent to include affordability in your scores.'
+    : '✓ Changes saved automatically';
 
   function applySample(profile: (typeof samples)[number]) {
     setSample(profile.name);
@@ -73,12 +122,11 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
           <p>Share your budget, commute and priorities. You don’t need to know any neighbourhood names.</p>
         </header>
 
-        <div className={styles.profileTools}><Link href="/housing/personalize/">← Back to choices</Link><button type="button" onClick={() => { clearProfile(); router.refresh(); }}>Clear saved profile</button></div>
+        <div className={styles.profileTools}>{returnTo ? <Link href={returnTo}>← Back to comparison</Link> : <Link href="/housing/personalize/">← Back to choices</Link>}<small className={styles.saveStatus} role="status">{saveStatus}</small><button type="button" onClick={() => { clearProfile(); router.refresh(); }}>Clear saved profile</button></div>
         <form onChange={() => { setSample(''); setSubmitted(false); }} onSubmit={event => {
           event.preventDefault();
-          const profile: SearchProfile = { version: 1, income, rent, mode, work, school, trip, priorities, weights, interests, notes, workPoint, schoolPoint };
-          if (!parseProfile(JSON.stringify(profile))) { setSubmitted(true); return; }
-          writeSession(PROFILE_KEY, JSON.stringify(profile));
+          if (!canSubmit) { setSubmitted(true); return; }
+          saveOwnProfile(serialized);
           writeSession(RECOMMENDED_KEY, "[]");
           router.push("/housing/recommended/");
         }}>
@@ -193,7 +241,10 @@ function ProfileForm({ initial }: { initial: SearchProfile | null }) {
           <section className={styles.actions} aria-labelledby="profile-actions">
             <div><h2 id="profile-actions">Ready to explore places that fit you?</h2>
               <p>Find your five best-matching neighbourhoods. Each is scored on rent, trips to your work and school addresses, nearby amenities, safety and your lifestyle priorities, weighted the way you set above. History matching is not connected yet.</p></div>
-            <button type="submit">Find my neighbourhoods →</button>
+            <div className={styles.actionButtons}>
+              {returnTo && valid && <Link href={returnTo} className={styles.returnLink}>Back to comparison →</Link>}
+              <button type="submit">Find my neighbourhoods →</button>
+            </div>
           </section>
           <div className={styles.result} aria-live="polite">
             {submitted && <p role="alert">Check your budget, income and preference values before continuing.</p>}

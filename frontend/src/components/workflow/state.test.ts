@@ -5,6 +5,8 @@ import {
   SAVED_KEY,
   clearProfile,
   parsePlaces,
+  profileHref,
+  safeReturnTo,
   readSavedRaw,
   readSession,
   writeSaved,
@@ -70,4 +72,14 @@ it("clears the profile and recommendations from session state", () => {
   expect(storage.removeItem).toHaveBeenCalledWith(PROFILE_KEY);
   expect(storage.removeItem).toHaveBeenCalledWith(RECOMMENDED_KEY);
   expect(dispatchEvent).toHaveBeenLastCalledWith(expect.objectContaining({ type: "explorer-session-change" }));
+});
+
+it("only returns to same-site comparison pages after editing the profile", () => {
+  expect(safeReturnTo("/housing/compare/?from=saved&places=a,b")).toBe("/housing/compare/?from=saved&places=a,b");
+  expect(safeReturnTo("https://evil.example/housing/compare")).toBeNull();
+  expect(safeReturnTo("//evil.example")).toBeNull();
+  expect(safeReturnTo("/housing/compare\\..\\x")).toBeNull();
+  expect(safeReturnTo(null)).toBeNull();
+  expect(profileHref("/housing/compare/?places=a")).toBe("/housing/profile/?returnTo=%2Fhousing%2Fcompare%2F%3Fplaces%3Da");
+  expect(profileHref("https://evil.example")).toBe("/housing/profile/");
 });
