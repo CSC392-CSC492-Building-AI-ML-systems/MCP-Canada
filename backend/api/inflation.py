@@ -743,7 +743,8 @@ def annualized_inflation(from_year: int, to_year: int, table: CpiTable) -> Decim
     to_cpi = table.value_for(to_year)
     if from_cpi is None or to_cpi is None:
         return None
-    years = to_year - from_year
+    # Count the years as a positive span, so going back in time gives a negative rate.
+    years = abs(to_year - from_year)
     ratio = float(to_cpi / from_cpi)
     rate = (ratio ** (1 / years) - 1) * 100
     return Decimal(str(rate))

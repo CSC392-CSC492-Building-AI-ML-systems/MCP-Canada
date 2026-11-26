@@ -593,7 +593,8 @@ export function annualizedInflation(fromYear: number, toYear: number, table: Cpi
   if (fromCpi === undefined || toCpi === undefined) {
     return null;
   }
-  const years = toYear - fromYear;
+  // Count the years as a positive span, so going back in time gives a negative rate.
+  const years = Math.abs(toYear - fromYear);
   return (Math.pow(toCpi / fromCpi, 1 / years) - 1) * 100;
 }
 
