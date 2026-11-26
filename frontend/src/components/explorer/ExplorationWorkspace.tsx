@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { comparisonHref, explorerHref, readProfile, parsePlaces, readSavedRaw, subscribeSaved, writeSaved } from "../workflow/state";
+import { comparisonHref, explorerHref, parsePlaces, readSavedRaw, subscribeSaved, writeSaved } from "../workflow/state";
 import { useTeacher } from "../workflow/Teacher";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AcrossTimePanel } from "./AcrossTimePanel";
@@ -36,12 +36,9 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = NO_RECOMME
   const viewSelection = preview ?? selection;
   const [result, setResult] = useState<{ key: string; profile: NeighbourhoodProfile } | null>(null);
   const [profileError, setProfileError] = useState<{ key: string; message: string } | null>(null);
-  const [income, setIncome] = useState('');
-  const [budget, setBudget] = useState('');
   const storedSaved = useSyncExternalStore(subscribeSaved, readSavedRaw, () => '[]');
   const saved = useMemo(() => parsePlaces(storedSaved), [storedSaved]);
   const [storageNotice, setStorageNotice] = useState('');
-  const budgetAnchorHandled = useRef(false);
   const switchAbort = useRef<AbortController | null>(null);
   const selectionKey = viewSelection ? `${viewSelection.geographyId}:${viewSelection.year}` : '';
   const activeSet = sets.find(s => s.id === viewSelection?.boundarySetId);
@@ -54,8 +51,6 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = NO_RECOMME
     loadWorkspaceData(abort.signal).then(data => {
       setCatalog(data.catalog);
       setSets(data.boundary_sets);
-      const preferences = readProfile();
-      if (preferences) { setIncome(preferences.income); setBudget(preferences.rent); }
       const params = new URLSearchParams(window.location.search);
       const requestedId = params.get('neighbourhood') ?? (initialSidebar === 'recommended' ? recommendedPlaces[0]?.id : initialSidebar === 'saved' ? parsePlaces(readSavedRaw())[0]?.id : null);
       if (params.get('list') === 'recommended' && initialSidebar !== 'recommended') { router.replace('/housing/recommended/'); return; }
@@ -81,13 +76,6 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = NO_RECOMME
       .catch(e => { if (!abort.signal.aborted) setProfileError({ key, message: e.message }); });
     return () => abort.abort();
   }, [viewSelection, catalog]);
-
-  useEffect(() => {
-    if (profile && !budgetAnchorHandled.current && window.location.hash === '#budget-title') {
-      document.getElementById('budget-title')?.scrollIntoView({block:'center'});
-      budgetAnchorHandled.current = true;
-    }
-  }, [profile]);
 
   function savePlaces(next: SavedPlace[]) {
     if (!writeSaved(next)) setStorageNotice('Saved places are available for this session only.');
@@ -163,7 +151,7 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = NO_RECOMME
             <select aria-label="Boundary set" value={viewSelection?.boundarySetId ?? selection.boundarySetId} onChange={e => void switchBoundarySet(sets.find(s => s.id === e.target.value)!)}>{sets.map(s => <option key={s.id} value={s.id}>{s.label} neighbourhoods · {s.years.join(', ')}</option>)}</select>} />
         </div>}
       </section>
-      {profile ? acrossTime ? <AcrossTimePanel key={profile.geography.id} profile={profile} onCompare={addSelected} onAskTeacher={openTeacher} saved={isSaved} limitReached={saved.length >= 5} /> : <NeighbourhoodDetailsPanel profile={profile} income={income} budget={budget} onIncomeChange={setIncome} onBudgetChange={setBudget} saved={isSaved} limitReached={saved.length >= 5} onCompare={addSelected} onAskTeacher={openTeacher} /> : <aside className={styles.detailsPanel}><div className={styles.panelScroll} role={error ? 'alert' : 'status'}><span className={styles.kicker}>NEIGHBOURHOOD DETAILS</span><h2>{error ? 'Could not load this selection' : loadError ? 'Waiting for published data' : 'Loading housing data…'}</h2><p>{error || loadError || 'Finding the selected Census period and its sources.'}</p>{error && <button className={styles.secondaryButton} onClick={() => setSelection(s => s ? { ...s } : null)}>Try again</button>}</div></aside>}
+      {profile ? acrossTime ? <AcrossTimePanel key={profile.geography.id} profile={profile} onCompare={addSelected} onAskTeacher={openTeacher} saved={isSaved} limitReached={saved.length >= 5} /> : <NeighbourhoodDetailsPanel profile={profile} catalog={catalog} saved={isSaved} limitReached={saved.length >= 5} onCompare={addSelected} onAskTeacher={openTeacher} /> : <aside className={styles.detailsPanel}><div className={styles.panelScroll} role={error ? 'alert' : 'status'}><span className={styles.kicker}>NEIGHBOURHOOD DETAILS</span><h2>{error ? 'Could not load this selection' : loadError ? 'Waiting for published data' : 'Loading housing data…'}</h2><p>{error || loadError || 'Finding the selected Census period and its sources.'}</p>{error && <button className={styles.secondaryButton} onClick={() => setSelection(s => s ? { ...s } : null)}>Try again</button>}</div></aside>}
     </main>
 
   </div>;

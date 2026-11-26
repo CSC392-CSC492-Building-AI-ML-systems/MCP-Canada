@@ -11,6 +11,7 @@
  * Values are never estimated, interpolated or filled.
  */
 import type { BoundarySet, Measurement, NeighbourhoodProfile } from './types';
+import { censusSources } from './censusSource';
 type Source = NonNullable<Measurement['source']>;
 type Indicator = { id: string; label: string; unit: string; universe: string; statistic: string };
 export type BoundaryLink = { id: string; parent: string; relation: 'same' | 'part' };
@@ -129,9 +130,9 @@ export async function loadProfile(catalog: Catalog, geographyId: string, year: n
     if (pending.has(cacheKey)) return pending.get(cacheKey)!;
     const request=(async():Promise<Measurement>=>{
       const indicator=catalog.indicators.find(i=>i.id===id);
-      // The original import generates census-YEAR-* release IDs. Multiple releases
-      // require an explicit reviewed choice rather than silently selecting one.
-      const sources=catalog.sources.filter(s=>s.id.startsWith(`census-${y}-`));
+      // MCP-Canada release when loaded, else the CSV import (see censusSource.ts). Multiple
+      // releases require an explicit reviewed choice rather than silently selecting one.
+      const sources=censusSources(catalog.sources,y);
       const missing:Measurement={value:null,status:'missing',reason:rows[y][key] === null ? `The ${y} Census profile does not publish this measure for neighbourhoods.` : 'No verified value is loaded for this measure and period.',source:null};
       if (!indicator) return missing;
       if (sources.length!==1) return {...missing,reason:'A unique reviewed Census release is not available.'};

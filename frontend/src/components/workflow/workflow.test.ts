@@ -1,5 +1,4 @@
 import { expect, it } from "vitest";
-import { budgetStartingPoints } from "./recommendations";
 import { comparisonHref, explorerHref, parsePlaces, parseProfile, type SearchProfile } from "./state";
 import { explainEvidence } from "./Teacher";
 const profile: SearchProfile = { version: 1, income: "72000", rent: "1500", mode: "Transit", work: "", school: "", trip: 30, priorities: [1], weights: [5, 4, 5, 3, 4, 4], interests: [], notes: "private note" };
@@ -23,14 +22,6 @@ it("rejects invalid rents, preference limits, and malformed preference values", 
 
   expect(invalidProfiles.map(value => parseProfile(JSON.stringify(value))))
     .toEqual(invalidProfiles.map(() => null));
-});
-it("filters missing costs, respects budget, and does not invent fit scores", () => {
-  const rows = [{ geography_id: "a", name: "A", value: "1200", status: "observed", census_year: 2021, source_locator: "a" }, { geography_id: "b", name: "B", value: null, status: "missing", census_year: 2021, source_locator: "b" }, { geography_id: "c", name: "C", value: "1600", status: "observed", census_year: 2021, source_locator: "c" }];
-  const results = budgetStartingPoints(rows, profile);
-  expect(results.map(p => p.id)).toEqual(["a"]);
-  expect(results[0].score).toBeNull();
-  expect(budgetStartingPoints(rows, { ...profile, weights: [0, 5, 5, 5, 5, 5] })).toEqual([]);
-  expect(budgetStartingPoints(rows, { ...profile, rent: "500" })[0].summary).toContain("above your budget");
 });
 it("never puts income, destinations or notes in navigation URLs", () => {
   const url = comparisonHref([{ id: "a", name: "A", year: 2021, boundary: "toronto-158" }], "recommended");
@@ -65,4 +56,11 @@ it("the teacher explains limits and does not claim missing information is known"
   expect(explainEvidence("How do data gaps affect comparisons?", null)).toContain("excluded, not estimated");
   expect(explainEvidence("Explain this history", null)).toContain("present-day imagery");
   expect(explainEvidence("Hello", null)).toContain("AI model is not connected");
+});
+it("without the AI model, the teacher quotes the on-screen match score for the place asked about", () => {
+  const score = (neighbourhood: string, match_score: number) => ({ neighbourhood, match_score, based_on: "5 of the 6 factors weighted in the profile", why: [`Why ${neighbourhood}.`], factors: [] });
+  const context = { title: "Comparison", profiles: [], match_scores: [score("Annex", 41), score("Mount Pleasant East", 43)] };
+  expect(explainEvidence("explain the match score for mount pleasant east", context))
+    .toBe("Mount Pleasant East: match score 43 / 100, based on 5 of the 6 factors weighted in the profile. Why Mount Pleasant East.");
+  expect(explainEvidence("how are scores worked out?", null)).toContain("nothing is counted as zero");
 });

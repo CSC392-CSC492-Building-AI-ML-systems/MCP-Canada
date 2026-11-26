@@ -1,3 +1,5 @@
+import { censusSources } from "@/components/explorer/censusSource";
+
 export type Source = {
   id: string;
   title: string;
@@ -85,9 +87,7 @@ export function sourcesForSelection(
 
   const censusYear = censusIndicatorYear(indicator);
   if (censusYear) {
-    return catalog.sources.filter((source) =>
-      source.id.startsWith(`census-${censusYear}-`),
-    );
+    return censusSources(catalog.sources, censusYear);
   }
 
   const geographySet = catalog.geography_sets.find(
