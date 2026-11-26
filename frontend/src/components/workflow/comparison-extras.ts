@@ -242,7 +242,7 @@ export async function neighbourhoodMeasures(catalog: Catalog, profiles: Neighbou
 
 export async function loadComparisonExtras(catalog: Catalog, profiles: NeighbourhoodProfile[], year: number, signal?: AbortSignal): Promise<ComparisonExtras> {
   // Census values come from the geography that holds the data (an unchanged counterpart when linked).
-  const dataId = (p: NeighbourhoodProfile) => p.available_years.length ? p.data_geography?.id ?? p.geography.id : null;
+  const dataId = (p: NeighbourhoodProfile) => p.available_years.includes(p.year) ? p.data_geography?.id ?? p.geography.id : null;
   const groups = new Map<string, string[]>();
   for (const p of profiles) {
     const id = dataId(p); if (!id) continue;

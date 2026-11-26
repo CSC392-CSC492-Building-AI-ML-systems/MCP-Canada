@@ -301,6 +301,24 @@ prerequisites, fresh versus existing databases, and troubleshooting.
 [loaded data inventory](docs/data-import-status.md) describe the data. Run
 `backend/.venv/bin/python backend/manage.py data_inventory` to inspect the actual database.
 
+### Comparing 2021 with earlier Census years
+
+The City published 2001–2016 Census data for its 140 earlier neighbourhoods and 2021 data
+for the current 158. Every 2021 neighbourhood lies wholly inside one earlier neighbourhood:
+124 are unchanged, and 16 earlier neighbourhoods were split into 34 parts. These links are
+committed in `backend/api/data/toronto_158_to_140.json`, so no setup step is needed.
+
+- **Historical 140 boundaries, 2001–2021.** The observations endpoints derive 2021 values per
+  request: an unchanged area uses its identical 2021 area; a split area adds counts and
+  weights averages by the households they describe (`backend/api/derived_census.py`).
+  Medians are not combined. Each derived row includes a `derived` field that explains how it
+  was produced.
+- **Current 158 boundaries.** Earlier years are shown only for the unchanged areas. A split
+  area points to the earlier area that contained it.
+
+The links are built from the boundary geometries. Rebuild them only if the boundary files
+change: `cd backend && uv run python manage.py build_boundary_crosswalk`.
+
 ## Commute and school travel times
 
 The "To work" and "To school" rows in the comparison table, and the matching tiles

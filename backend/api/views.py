@@ -19,6 +19,8 @@ from .models import (
 from .agent import TeacherUnavailable, ask_teacher
 from .mcp_canada_cache import fetch_from_mcp_canada
 from .services import get_health
+from . import derived_census
+from .boundary_crosswalk import boundary_links
 from . import transit
 
 
@@ -54,6 +56,8 @@ def catalog(request):
             "id", "label", "unit", "definition", "universe", "statistic",
             "dimensions",
         )),
+        # How each 2021 (158) neighbourhood relates to the earlier (140) ones.
+        "boundary_links": boundary_links(),
     })
 
 
@@ -71,12 +75,20 @@ def observations(request):
             status=400,
         )
 
-    rows = Observation.objects.filter(**filters).order_by(
+    rows = list(Observation.objects.filter(**filters).order_by(
         "reference_year", "period", "id",
     ).values(
         "census_year", "reference_year", "period", "value", "status",
         "source_locator", "notes",
-    )
+    ))
+    if not rows:
+        geography_set = Geography.objects.filter(id=filters["geography_id"]).values_list(
+            "geography_set_id", flat=True).first()
+        if geography_set and derived_census.applies(geography_set, filters["source_id"]):
+            derived = derived_census.derive(filters["source_id"], filters["indicator_id"], [filters["geography_id"]])
+            return JsonResponse({"observations": [
+                {k: v for k, v in row.items() if k not in ("geography_id", "name")} for row in derived
+            ]})
     return JsonResponse({
         "observations": [
             {**row, "value": str(row["value"]) if row["value"] is not None else None}
@@ -103,6 +115,10 @@ def observations_batch(request):
         if not year.isdigit():
             return JsonResponse({"error": "reference_year must be a year"}, status=400)
         filters["reference_year"] = int(year)
+    if derived_census.applies(filters["geography__geography_set_id"], filters["source_id"]):
+        # The 2021 Census is published only on the 158 boundaries; derive the 140 values.
+        return JsonResponse({"observations": derived_census.derive(
+            filters["source_id"], filters["indicator_id"], reference_year=filters.get("reference_year"))})
     rows = Observation.objects.filter(**filters).order_by(
         "geography_id", "reference_year", "period", "id",
     ).values(

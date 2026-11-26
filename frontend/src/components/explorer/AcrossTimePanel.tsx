@@ -1,8 +1,17 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { formatPercent, measuredChange } from "./change";
 import { measuredNumber, money } from "./NeighbourhoodDetailsPanel";
-import type { NeighbourhoodProfile } from "./types";
+import type { Measurement, NeighbourhoodProfile, ProfileMetrics } from "./types";
 import styles from "./explorer.module.css";
+
+type Row = { key: keyof ProfileMetrics; label: string; format: (n: number) => string };
+const ROWS: Row[] = [
+  { key: "cost", label: "Average renter shelter cost / mo.", format: money },
+  { key: "income", label: "Average household income / yr", format: money },
+  { key: "population", label: "Population", format: n => n.toLocaleString("en-CA") },
+];
+const combined = (m?: Measurement) => m?.derived?.relation === "combined";
 
 export function AcrossTimePanel({ profile, onCompare, saved, limitReached, onAskTeacher }: {
   profile: NeighbourhoodProfile; onCompare: () => void; saved: boolean; limitReached: boolean; onAskTeacher?: () => void;
@@ -13,18 +22,39 @@ export function AcrossTimePanel({ profile, onCompare, saved, limitReached, onAsk
   const years = profile.available_years;
   const defaults = years.length <= 3 ? years : [years[0], years[Math.floor((years.length - 1) / 2)], years[years.length - 1]];
   const periods = defaults.map((year, i) => years.includes(chosen[i]) ? chosen[i] : year);
-  const costs = periods.map(year => profile.history.find(item => item.year === year)?.cost);
+  const at = (year: number) => profile.history.find(item => item.year === year);
+  const [first, last] = [Math.min(...periods), Math.max(...periods)];
+  const derivedNotes = [...new Set(periods.flatMap(y => ROWS.map(r => at(y)?.[r.key]).filter(combined).map(m => m!.derived!.method)))];
+  const sources = [...new Map(periods.flatMap(y => ROWS.flatMap(r => { const m = at(y)?.[r.key]; return m?.source ? [[`${y}|${m.source.id}`, { year: y, m }] as const] : []; }))).values()];
   return <aside className={styles.detailsPanel} aria-labelledby="across-time-title">
     <div className={styles.panelScroll} ref={scroll}>
       <p className={styles.kicker}>ONE PLACE · MULTIPLE PERIODS</p><h1 id="across-time-title" className={styles.acrossHeading}>Compare across time</h1>
-      <section className={styles.contextCard}><p className={styles.kicker}>SELECTED PLACE</p><h2>{profile.geography.name}</h2><p className={styles.caption}>Keep the same location and boundary for every period.</p></section>
+      <section className={styles.contextCard}><p className={styles.kicker}>SELECTED PLACE</p><h2>{profile.geography.name}</h2><p className={styles.caption}>The same neighbourhood boundary is used for every period.</p></section>
+      {profile.boundary_note && <section className={styles.missingNotice}><h2>BOUNDARY CHANGED IN 2021</h2><p>{profile.boundary_note}</p></section>}
       <div className={styles.periodChoices}>{periods.map((year, i) => <label key={i}><span className={styles.visuallyHidden}>Comparison period {i + 1}</span><select value={year} onChange={event => setChosen(periods.map((y, n) => n === i ? Number(event.target.value) : y))}>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></label>)}</div>
-      <h2>What changed here?</h2>
-      <section className={styles.missingNotice}><h2>PUBLISHED CENSUS DATA</h2><p>{years.length < 2 ? "Only one Census period is loaded for this boundary set. Choose Historical 140 in the timeline to explore earlier years on those boundaries." : "Compare the loaded source values below. Earlier average gross rent and later median shelter costs have different definitions; no change percentage is inferred."}</p></section>
-      <table className={styles.acrossTable}><caption className={styles.visuallyHidden}>Housing measurements for the same neighbourhood across selected Census periods</caption><thead><tr><th>Metric</th>{periods.map((y, i) => <th key={i}>{y}</th>)}</tr></thead><tbody><tr><th scope="row">Renter shelter / mo.</th>{costs.map((m, i) => { const n = m && measuredNumber(m); return <td key={i}>{n == null ? "—" : money(n)}</td>; })}</tr><tr><th scope="row">Statistic</th>{costs.map((m, i) => <td key={i}>{m?.statistic ?? "—"}</td>)}</tr><tr><th scope="row">Reference year</th>{costs.map((m, i) => <td key={i}>{m?.reference_year ?? "—"}</td>)}</tr></tbody></table>
-      <section className={styles.explanation}><h2>Reading the change</h2><p>The table retains the same neighbourhood boundary across periods. A dash means unavailable, never zero. Dollar values are nominal and are not adjusted for inflation.</p></section>
+      {years.length < 2 && <section className={styles.missingNotice}><h2>ONE PERIOD ONLY</h2><p>Only one Census period is available for this area on these boundaries, so there is nothing to compare it with.</p></section>}
+      <table className={styles.acrossTable}><caption className={styles.visuallyHidden}>Census measurements for the same neighbourhood across selected periods</caption>
+        <thead><tr><th>Metric</th>{periods.map((y, i) => <th key={i}>{y}</th>)}</tr></thead>
+        <tbody>{ROWS.map(row => <tr key={row.key}><th scope="row">{row.label}</th>{periods.map((y, i) => {
+          const m = at(y)?.[row.key]; const n = m ? measuredNumber(m) : null;
+          return <td key={i} title={n === null ? m?.reason || "Unavailable" : m?.derived?.method}>{n === null ? "—" : row.format(n)}{combined(m) && <sup aria-label="combined from 2021 neighbourhoods">*</sup>}</td>;
+        })}</tr>)}
+          <tr><th scope="row">Income year</th>{periods.map((y, i) => <td key={i}>{at(y)?.income.reference_year ?? "—"}</td>)}</tr>
+        </tbody></table>
+      {derivedNotes.length > 0 && <p className={styles.caption}>* {derivedNotes.join(" ")}</p>}
+      {periods.length > 1 && first !== last && <section className={styles.explanation} aria-labelledby="change-title"><h2 id="change-title">What changed, {first}–{last}</h2>
+        <ul className={styles.changeList}>{ROWS.map(row => {
+          const from = at(first)?.[row.key], to = at(last)?.[row.key];
+          const change = measuredChange(from ? measuredNumber(from) : null, to ? measuredNumber(to) : null);
+          if (!change) return <li key={row.key}><strong>{row.label}:</strong> not comparable — the {from && measuredNumber(from) !== null ? last : first} value is unavailable.</li>;
+          const sign = change.absolute > 0 ? "+" : change.absolute < 0 ? "−" : "";
+          return <li key={row.key}><strong>{row.label}:</strong> {row.format(change.from)} → {row.format(change.to)} ({sign}{row.format(Math.abs(change.absolute))}{change.percent !== null && `, ${formatPercent(change.percent)}`}){change.major && <span className={styles.majorChange}>Major change</span>}</li>;
+        })}</ul>
+        <p className={styles.caption}>Measured change only; the data does not show what caused it. Dollar values are nominal (not adjusted for inflation). Changes of 15% or more are marked as major.</p>
+      </section>}
+      <section className={styles.explanation}><h2>Reading the table</h2><p>A dash means unavailable, never zero. Renter shelter cost is the same average in every year (called gross rent in 2001 and 2006); the 2016 neighbourhood profile does not publish it. Income is for the year before each Census.</p>{profile.method.population && <p className={styles.caption}>{profile.method.population}</p>}</section>
       <h2>Historical context by period</h2>{periods.map((year, i) => <section className={styles.contextCard} key={i}><h2>{year} · investigate</h2><p>How did housing costs and the surrounding community change during this period?</p><p className={styles.caption}>No verified historical accounts linked.</p></section>)}
-      <section className={styles.panelSection}><h2>Sources &amp; comparison method</h2><p className={styles.caption}>{profile.method.comparison}</p>{costs.map((m, i) => m?.source && <div className={styles.sourceItem} key={i}><a href={m.source.url} target="_blank" rel="noreferrer">{periods[i]} · {m.source.title} ↗</a><p>{m.label}</p><p>{m.source.publisher} · Reference year {m.reference_year}</p></div>)}</section>
+      <section className={styles.panelSection}><h2>Sources &amp; comparison method</h2><p className={styles.caption}>{profile.method.comparison}</p>{sources.map(({ year, m }) => <div className={styles.sourceItem} key={`${year}|${m.source!.id}`}><a href={m.source!.url} target="_blank" rel="noreferrer">{year} · {m.source!.title} ↗</a><p>{m.source!.publisher}</p></div>)}</section>
     </div>
     <footer className={styles.panelActions}><button type="button" className={styles.primaryButton} disabled={saved || limitReached} onClick={onCompare}>{saved ? "Added to compare ✓" : limitReached ? "5 places saved" : "Add to compare"}</button><button type="button" className={styles.secondaryButton} onClick={onAskTeacher} disabled={!onAskTeacher}>Ask the AI teacher</button></footer>
   </aside>;
