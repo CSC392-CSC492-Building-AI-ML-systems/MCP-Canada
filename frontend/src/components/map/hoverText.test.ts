@@ -3,7 +3,7 @@ vi.mock("mapbox-gl", () => ({ default: {} }));
 const { hoverText } = await import("./MapView");
 
 describe("hoverText: one label, never stacked", () => {
-  const area = { name: "Pelmo Park-Humberlea", population: 10_000, shaded: true };
+  const area = { name: "Pelmo Park-Humberlea", shade_label: "10,000 people", shaded: true };
   const park = { name: "PELLATT PARK", metres: 420 };
   const school = { name: "Test School", label: "Schools", metres: 350 };
   it("shows the amenity point over the park and the neighbourhood", () => {

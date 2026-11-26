@@ -4,6 +4,7 @@ export const SHOW_BOUNDARIES_KEY = "mcp-canada-show-boundaries";
 export const SHOW_POPULATION_KEY = "mcp-canada-show-population";
 export const AMENITY_LAYERS_KEY = "mcp-canada-amenity-layers";
 export const SHOW_LAND_USE_KEY = "mcp-canada-show-land-use";
+export const SHOW_COMMUTE_KEY = "mcp-canada-show-commute";
 const CHANGE_EVENT = "map-preferences-change";
 const memory = new Map<string, boolean>();
 const textMemory = new Map<string, string>();
@@ -31,6 +32,9 @@ export const writeShowPopulation = (show: boolean) => write(SHOW_POPULATION_KEY,
 /** Zoning (land use) colours. Off by default. */
 export const readShowLandUse = () => read(SHOW_LAND_USE_KEY, false);
 export const writeShowLandUse = (show: boolean) => write(SHOW_LAND_USE_KEY, show);
+/** Commute time shading from the profile's work or school address. Off by default. */
+export const readShowCommute = () => read(SHOW_COMMUTE_KEY, false);
+export const writeShowCommute = (show: boolean) => write(SHOW_COMMUTE_KEY, show);
 
 /** Amenity layers this viewer turned on, as a comma-separated list (a stable snapshot
  * for useSyncExternalStore). Off by default so the map is not cluttered. */

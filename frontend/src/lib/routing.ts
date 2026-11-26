@@ -70,7 +70,18 @@ type TransitResponse = {
   results: { id: string; minutes: number | null; reason?: string; leave_by?: string; walk_only?: boolean; legs?: TransitLeg[] }[];
 };
 
+// The backend routes at most 10 origins per request (MAX_TRANSIT_ORIGINS in api/views.py).
+const TRANSIT_MAX_ORIGINS = 10;
+
+/** Transit times in batches the backend accepts, sent together and merged in order. */
 async function transitTimes(origins: Origin[], destination: LngLat, signal?: AbortSignal): Promise<CommuteResult> {
+  const batches: Origin[][] = [];
+  for (let start = 0; start < origins.length; start += TRANSIT_MAX_ORIGINS) batches.push(origins.slice(start, start + TRANSIT_MAX_ORIGINS));
+  const results = await Promise.all(batches.map(batch => transitBatch(batch, destination, signal)));
+  return { ...results[0], byId: Object.assign({}, ...results.map(r => r.byId)) };
+}
+
+async function transitBatch(origins: Origin[], destination: LngLat, signal?: AbortSignal): Promise<CommuteResult> {
   // POST keeps the destination out of URLs and server logs. The backend stores nothing.
   const response = await fetch("/api/transit/commute/", {
     method: "POST", headers: { "Content-Type": "application/json" }, signal,

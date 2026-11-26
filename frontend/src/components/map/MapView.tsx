@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { MAPBOX_TOKEN, TORONTO_BBOX, TORONTO_CENTER, type Place } from "@/lib/mapbox";
 import { boundsOf, type Boundaries } from "@/lib/boundaries";
-import { POPULATION_SCALE } from "@/lib/population";
+import { shadingColor, type Shading } from "@/lib/shading";
 import { AMENITY_LAYERS, displayName, formatDistance, PARKS_LAYER, walkMinutes } from "@/lib/amenities";
 import { LAND_USE_CATEGORIES } from "@/lib/landUse";
 import styles from "./MapView.module.css";
@@ -22,8 +22,8 @@ type Props = {
   // Mapbox Standard basemap options, toggled by the layer chips.
   show3dObjects?: boolean;
   showTransit?: boolean;
-  // Population per geography id; null or absent means unknown (shown as "no data").
-  shading?: Record<string, number | null> | null;
+  /** Colours every neighbourhood by one measure, such as population or commute time. */
+  shading?: Shading | null;
   /** Outlines of every neighbourhood. The selected one stays highlighted either way. */
   showBoundaries?: boolean;
   /** Present-day amenity points: properties category, name, label and optional metres. */
@@ -72,16 +72,10 @@ export function hoverText(amenity: HoverProperties, park: HoverProperties, neigh
     return `Zoned ${zone.label.toLowerCase()}${typeof zone.zone === "string" && zone.zone ? ` (${zone.zone})` : ""}`;
   }
   if (typeof neighbourhood?.name === "string") {
-    const people = typeof neighbourhood.population === "number" ? `${neighbourhood.population.toLocaleString("en-CA")} people`
-      : neighbourhood.shaded ? "Population unknown" : "";
-    return people ? `${neighbourhood.name} · ${people}` : neighbourhood.name;
+    return typeof neighbourhood.shade_label === "string" ? `${neighbourhood.name} · ${neighbourhood.shade_label}` : neighbourhood.name;
   }
   return null;
 }
-const { breaks, colors, noData } = POPULATION_SCALE;
-const populationColor = ["case", ["has", "population"],
-  ["step", ["get", "population"], colors[0], ...breaks.flatMap((b, i) => [b, colors[i + 1]])],
-  noData] as mapboxgl.ExpressionSpecification;
 
 export default function MapView({ selected, boundaries, selectedGeographyId, onGeographyClick, onPlaceDismiss, show3dObjects = true, showTransit = true, showBoundaries = true, amenities, parks, landUse, shading, preview = false, compact = false, label = "Map of Toronto", className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -156,11 +150,12 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
       // Transparent fill so a click anywhere inside a neighbourhood hits it.
       map.addLayer({ id: "neighbourhood-hit", type: "fill", source: SOURCE, slot: "middle",
         paint: { "fill-color": "#295738", "fill-opacity": 0 } });
-      // Only features marked "shaded" are coloured; without population data the map stays plain.
-      map.addLayer({ id: "population-fill", type: "fill", source: SOURCE, slot: "middle",
+      // Only features marked "shaded" are coloured; without shading the map stays plain.
+      // The colours are set with the data, since each measure has its own scale.
+      map.addLayer({ id: "shading-fill", type: "fill", source: SOURCE, slot: "middle",
         filter: ["==", ["get", "shaded"], true],
-        paint: { "fill-color": populationColor, "fill-opacity": 0.65 } });
-      // Zoning sits with the population shading, under the neighbourhood outlines.
+        paint: { "fill-color": "#c9c9c2", "fill-opacity": 0.65 } });
+      // Zoning sits with the neighbourhood shading, under the neighbourhood outlines.
       map.addSource(LAND_USE_SOURCE, { type: "geojson", data: NO_FEATURES });
       map.addLayer({ id: "land-use-fill", type: "fill", source: LAND_USE_SOURCE, slot: "middle",
         paint: { "fill-color": landUseColor, "fill-opacity": 0.65 } });
@@ -227,17 +222,21 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    // Copy each neighbourhood's population onto its feature so the fill layer can colour it.
-    // A missing value gets no "population" property, which the layer shows as "no data".
+    // Copy each neighbourhood's value and hover text onto its feature so the fill layer can colour it.
+    // A missing value gets no "shade_value" property, which the layer shows as "no data".
     const data = boundaries && shading ? {
       ...boundaries,
       features: boundaries.features.map((f) => {
-        const population = shading[f.properties.geography_id];
-        return { ...f, properties: { ...f.properties, shaded: true, ...(population == null ? {} : { population }) } };
+        const value = shading.values[f.properties.geography_id] ?? null;
+        return { ...f, properties: { ...f.properties, shaded: true, shade_label: shading.describe(value), ...(value === null ? {} : { shade_value: value }) } };
       }),
     } : boundaries;
+    if (shading) map.setPaintProperty("shading-fill", "fill-color", shadingColor(shading) as mapboxgl.ExpressionSpecification);
     map.getSource<mapboxgl.GeoJSONSource>(SOURCE)?.setData(data ?? EMPTY);
-    // The green tint would muddy the population colours, so only the thick outline marks the selection.
+    // A grey basemap while shading, so parks, water and streets don't tint the colours.
+    map.setConfigProperty("basemap", "theme", shading ? "monochrome" : "default");
+    map.setPaintProperty("shading-fill", "fill-opacity", shading ? 0.8 : 0.65);
+    // The green tint would muddy the shading colours, so only the thick outline marks the selection.
     map.setPaintProperty("selected-fill", "fill-opacity", shading ? 0 : 0.25);
   }, [ready, boundaries, shading]);
 

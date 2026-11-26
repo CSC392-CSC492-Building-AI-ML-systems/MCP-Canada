@@ -14,6 +14,8 @@ const LandingMapPreview=dynamic(()=>import('./LandingMapPreview'),{ssr:false,loa
 
 type Place = {id:string;name:string};
 const MIN_ADDRESS_QUERY=3;
+// One neighbourhood, one street and one building, matching what the search box accepts.
+const TRY_PLACES=['Kensington-Chinatown','Queen Street West','Casa Loma'];
 
 export function HomePage() {
   const [query,setQuery]=useState('');
@@ -86,7 +88,7 @@ export function HomePage() {
             {!matching.length&&!addresses.length&&!addressesPending&&!addressResult?.failed&&<p>No matching place in Toronto.</p>}
           </>}{searchMessage&&<p role="status">{searchMessage}</p>}</div>}
         </div>
-        <div className={styles.searchExamples}><span>TRY A PLACE</span>{['UTM campus','Davis Building','Instructional Centre'].map(place=><button type="button" key={place} onClick={()=>{setQuery(place);void prepareSearch();}}>{place} <span aria-hidden="true">↗</span></button>)}</div>
+        <div className={styles.searchExamples}><span>TRY A PLACE</span>{TRY_PLACES.map(place=><button type="button" key={place} onClick={()=>{setQuery(place);void prepareSearch();}}>{place} <span aria-hidden="true">↗</span></button>)}</div>
       </div>
       <div className={styles.previewColumn}><LandingMapPreview/>
       </div></section>

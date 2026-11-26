@@ -75,3 +75,17 @@ describe("land use preference", () => {
     expect(fresh.readShowPopulation()).toBe(true);
   });
 });
+
+describe("commute shading preference", () => {
+  it("is off by default and remembered", async () => {
+    vi.resetModules();
+    const fresh = await import("./mapPreferences");
+    vi.stubGlobal("window", { dispatchEvent: () => true });
+    const storage = fakeStorage();
+    vi.stubGlobal("localStorage", storage);
+    expect(fresh.readShowCommute()).toBe(false);
+    fresh.writeShowCommute(true);
+    expect(storage.store.get(fresh.SHOW_COMMUTE_KEY)).toBe("true");
+    expect(fresh.readShowCommute()).toBe(true);
+  });
+});

@@ -43,6 +43,11 @@
 .legend ul { display: flex; flex-wrap: wrap; gap: 3px 10px; margin: 0 0 5px; padding: 0; list-style: none; }
 .legend li { display: flex; align-items: center; gap: 5px; }
 .legend li span { width: 14px; height: 10px; border-radius: 2px; }
+.legend .bandList { display: grid; gap: 2px; }
+.legend .bandList li { padding: 1px 4px; margin: 0 -4px; border-radius: 4px; }
+.legend .bandList .legendCurrent { background: #eef0e8; color: #1a1f1c; font-weight: 700; }
+.legend .bandList em { font-style: normal; font-weight: 600; color: #61665e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.legend .legendSelected { margin-bottom: 6px; font-size: 13px; color: #1a1f1c; }
 .legend li .legendDot { width: 10px; height: 10px; border-radius: 50%; }
 .legend p { margin: 0; line-height: 1.45; }
 .legend .legendNote { margin-bottom: 4px; color: #1a1f1c; font-weight: 600; }

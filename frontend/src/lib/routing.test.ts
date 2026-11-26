@@ -90,6 +90,22 @@ describe('commuteTimes', () => {
     expect(result.arriveBy).toBe('09:00');
   });
 
+  it('splits more than 10 transit origins into batches the backend accepts and merges them', async () => {
+    const many = Array.from({ length: 23 }, (_, i) => ({ id: `n${i}`, coordinates: [-79.4, 43.7] as [number, number] }));
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      const sent: { id: string }[] = JSON.parse(String(init.body)).origins;
+      return json({ status: 'ok', service_date: '2026-11-03', arrive_by: '09:00', method: 'Schedule.', source: { id: 's', title: 'TTC', publisher: 'TTC', url: '', version: '1' },
+        results: sent.map((o, i) => ({ id: o.id, minutes: 20 + i, legs: [] })) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { commuteTimes } = await import('./routing');
+    const result = await commuteTimes('Transit', many, [-79.38, 43.65]);
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).origins.length)).toEqual([10, 10, 3]);
+    expect(Object.keys(result.byId)).toHaveLength(23);
+    expect(result.byId.n22.minutes).toBe(22);
+    expect(result.arriveBy).toBe('09:00');
+  });
+
   it('reports the backend reason when the transit index is missing', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ status: 'unavailable', error: 'Run build_transit_index.' }, 503)));
     const { commuteTimes } = await import('./routing');

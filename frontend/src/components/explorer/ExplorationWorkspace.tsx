@@ -72,7 +72,8 @@ export function ExplorationWorkspace({ renderMap, recommendedPlaces = NO_RECOMME
     const abort = new AbortController();
     const key = `${viewSelection.geographyId}:${viewSelection.year}`;
     loadProfile(catalog, viewSelection.geographyId, viewSelection.year, abort.signal)
-      .then(data => { setResult({ key, profile: data }); setProfileError(null); })
+      // A request for an earlier choice can still finish after it was cancelled; drop it.
+      .then(data => { if (abort.signal.aborted) return; setResult({ key, profile: data }); setProfileError(null); })
       .catch(e => { if (!abort.signal.aborted) setProfileError({ key, message: e.message }); });
     return () => abort.abort();
   }, [viewSelection, catalog]);

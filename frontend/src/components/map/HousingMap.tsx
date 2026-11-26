@@ -7,10 +7,15 @@ import type { ExplorationSelection } from "@/components/explorer/types";
 import { findBoundary, loadBoundaries, type Boundaries } from "@/lib/boundaries";
 import { MAPBOX_TOKEN, placeFromSearch, type Place } from "@/lib/mapbox";
 import { loadPopulation, POPULATION_SCALE, type PopulationLayer } from "@/lib/population";
-import { readAmenityLayers, readShowBoundaries, readShowLandUse, readShowPopulation, subscribeMapPreferences, writeAmenityLayers, writeShowBoundaries, writeShowLandUse, writeShowPopulation } from "@/lib/mapPreferences";
+import { readAmenityLayers, readShowBoundaries, readShowCommute, readShowLandUse, readShowPopulation, subscribeMapPreferences, writeAmenityLayers, writeShowBoundaries, writeShowCommute, writeShowLandUse, writeShowPopulation } from "@/lib/mapPreferences";
+import { commuteBands, commuteShading, COMMUTE_COLORS, COMMUTE_NO_DATA } from "@/lib/commuteRange";
+import { clockLabel, isTravelMode } from "@/lib/routing";
+import { bandOf, type Shading } from "@/lib/shading";
+import { tripMinutes, useCommutes } from "@/components/workflow/commutes";
+import { parseProfile, PROFILE_KEY, readSession, subscribeSession } from "@/components/workflow/state";
 import { LandUseKey, useLandUse } from "./LandUseLegend";
 import { LayersPanel, type LayerGroup } from "./LayersPanel";
-import { MapLegend, type LegendSection } from "./MapLegend";
+import { BandKey, MapLegend, type LegendSection } from "./MapLegend";
 import { AMENITY_LAYERS, type AmenityCategory } from "@/lib/amenities";
 import { amenityPoints, nearbyOrigin, useNearbyAmenities, useNearbyParks, useWalkingRoutes } from "./NearbyAmenities";
 import { parkCandidates, PARKS_LAYER, pointCandidates, summarizeNearby, summarizeParks, type NearbySummary } from "@/lib/amenities";
@@ -23,7 +28,8 @@ const OUTSIDE_NOTICE = "This location is outside the loaded neighbourhood bounda
 /** Map and location search for the housing explorer's map slot. Outlines the
  * active boundary set and highlights the selected neighbourhood;
  * clicking a neighbourhood, or searching an address inside one, selects it.
- * Neighbourhoods are shaded by population for the selected Census year. */
+ * Neighbourhoods can be shaded by population for the selected Census year, or by the
+ * present-day commute from each one to the work or school address in the user's profile. */
 export default function HousingMap({ selection, onSelectionChange }: {
   selection: ExplorationSelection | null;
   onSelectionChange: (selection: ExplorationSelection) => void;
@@ -49,9 +55,14 @@ export default function HousingMap({ selection, onSelectionChange }: {
   const showBoundaries = useSyncExternalStore(subscribeMapPreferences, readShowBoundaries, () => true);
   const showPopulation = useSyncExternalStore(subscribeMapPreferences, readShowPopulation, () => true);
   const showLandUse = useSyncExternalStore(subscribeMapPreferences, readShowLandUse, () => false);
-  // Zoning and population colour the same areas, so only one is shown at a time.
-  function togglePopulation() { if (!showPopulation) writeShowLandUse(false); writeShowPopulation(!showPopulation); }
-  function toggleLandUse() { if (!showLandUse) writeShowPopulation(false); writeShowLandUse(!showLandUse); }
+  const showCommute = useSyncExternalStore(subscribeMapPreferences, readShowCommute, () => false);
+  // Zoning, population and commute colour the same areas, so only one is shown at a time.
+  function colourBy(layer: "population" | "land-use" | "commute" | null) {
+    writeShowPopulation(layer === "population"); writeShowLandUse(layer === "land-use"); writeShowCommute(layer === "commute");
+  }
+  const togglePopulation = () => colourBy(showPopulation ? null : "population");
+  const toggleLandUse = () => colourBy(showLandUse ? null : "land-use");
+  const toggleCommute = () => colourBy(showCommute ? null : "commute");
   const amenityLayers = useSyncExternalStore(subscribeMapPreferences, readAmenityLayers, () => "");
   const enabledAmenities = useMemo(() => AMENITY_LAYERS.map((l) => l.category).filter((c) => amenityLayers.split(",").includes(c)), [amenityLayers]);
   const selectedFeature = boundaries?.features.find((f) => f.properties.geography_id === selection?.geographyId);
@@ -94,10 +105,31 @@ export default function HousingMap({ selection, onSelectionChange }: {
   const localOptions = useMemo(() => boundaries?.features.map((f) => ({
     id: f.properties.geography_id, name: f.properties.name, detail: `Toronto neighbourhood ${f.properties.code}`,
   })) ?? [], [boundaries]);
+  // Commute shading: every neighbourhood's trip to the profile's work address, or its school
+  // address when there is no work address. Nothing is requested while the layer is off.
+  const rawProfile = useSyncExternalStore(subscribeSession, () => readSession(PROFILE_KEY), () => null);
+  const profile = useMemo(() => parseProfile(rawProfile), [rawProfile]);
+  const trip = profile?.workPoint ? "work" : profile?.schoolPoint ? "school" : null;
+  const commuteOn = showCommute && !!trip;
+  const commutePlaces = useMemo(() => commuteOn && boundaries && selection
+    ? boundaries.features.map((f) => ({ id: f.properties.geography_id, boundarySetId: selection.boundarySetId })) : [],
+  [commuteOn, boundaries, selection?.boundarySetId]); // eslint-disable-line react-hooks/exhaustive-deps -- only the set id matters
+  const commuteProfile = useMemo(() => profile && trip === "work" ? { ...profile, schoolPoint: null } : profile, [profile, trip]);
+  const commutes = useCommutes(commutePlaces, commuteProfile);
+  const tripState = trip ? commutes[trip] : null;
+  const travelMode = profile && isTravelMode(profile.mode) ? profile.mode : "Transit";
+  const commuteLayer = useMemo(() => commuteOn && trip && tripState?.status === "ready"
+    ? commuteShading(Object.fromEntries(commutePlaces.map((p) => [p.id, tripMinutes(tripState, p.id)])), profile?.trip ?? 0, trip) : null,
+  [commuteOn, trip, tripState, commutePlaces, profile?.trip]);
   const populationKey = selection ? `${selection.boundarySetId}:${selection.year}` : "";
   const [population, setPopulation] = useState<{ key: string; layer?: PopulationLayer; error?: string } | null>(null);
   // Only shade with numbers for the boundary set and year on screen, never stale ones.
   const current = population?.key === populationKey ? population : null;
+  const populationData = current?.layer;
+  const populationLayer = useMemo<Shading | null>(() => populationData ? {
+    values: populationData.values, breaks: POPULATION_SCALE.breaks, colors: POPULATION_SCALE.colors, noData: POPULATION_SCALE.noData,
+    describe: (n) => n === null ? "Population unknown" : `${n.toLocaleString("en-CA")} people`,
+  } : null, [populationData]);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -142,6 +174,8 @@ export default function HousingMap({ selection, onSelectionChange }: {
     { title: "Colour the map by", counted: true, items: [
       { id: "population", label: "Population", hint: "For the year on the timeline", checked: showPopulation, onChange: togglePopulation },
       { id: "land-use", label: "Land use", hint: "City zoning in the selected area, present day", checked: showLandUse, onChange: toggleLandUse },
+      { id: "commute", label: "Commute time", hint: trip ? `To your ${trip} address by ${travelMode.toLowerCase()}, present day` : "Add a work or school address in your profile",
+        checked: commuteOn, onChange: toggleCommute, disabled: !trip },
     ] },
     { title: "Nearby places", counted: true, items: nearbyLayers.map(({ category, label, color }) => ({
       id: category, label, swatch: color, checked: isNearbyOn(category), onChange: () => toggleLayer(category) })) },
@@ -153,16 +187,24 @@ export default function HousingMap({ selection, onSelectionChange }: {
     ] },
   ];
   const activeNearby = nearbyLayers.filter((l) => isNearbyOn(l.category));
+  // Where the selected neighbourhood falls on the active shading, for the legend.
+  const selectedOn = (layer: Shading | null) => {
+    if (!layer || !selectedName || !selection) return null;
+    const value = layer.values[selection.geographyId] ?? null;
+    return { name: selectedName, text: layer.describe(value), band: value === null ? null : bandOf(value, layer.breaks) };
+  };
   const legendSections: LegendSection[] = [
     ...(selection && showPopulation ? [{ id: "population", title: `Population, ${selection.year}`, content: current?.layer ? <>
-      <ul>
-        {POPULATION_SCALE.labels.map((label, i) => <li key={label}><span style={{ background: POPULATION_SCALE.colors[i] }} />{label}</li>)}
-        <li><span style={{ background: POPULATION_SCALE.noData }} />No data</li>
-      </ul>
+      <BandKey labels={POPULATION_SCALE.labels} colors={POPULATION_SCALE.colors} noData={POPULATION_SCALE.noData} noDataLabel="No data" selected={selectedOn(populationLayer)} />
       {current.layer.note && <p className={styles.legendNote}>{current.layer.note}</p>}
       <p className={styles.legendSource}>Same scale for every year. Source: {current.layer.source.publisher}, {current.layer.source.title}.</p>
     </> : <p>{current?.error ? `Population unavailable: ${current.error}` : "Loading population…"}</p>,
       source: current?.layer ? `Same scale for every year. Source: ${current.layer.source.publisher}, ${current.layer.source.title}.` : undefined }] : []),
+    ...(commuteOn && tripState ? [{ id: "commute", title: `Commute to ${trip} · ${travelMode}`, content: tripState.status === "ready" ? <>
+      <BandKey labels={commuteBands(profile?.trip ?? 0).labels} colors={COMMUTE_COLORS} noData={COMMUTE_NO_DATA} noDataLabel="No route found" selected={selectedOn(commuteLayer)} />
+      <p className={styles.legendSource}>{tripState.result.arriveBy ? `Weekday schedule, arriving by ${clockLabel(tripState.result.arriveBy)}. ` : ""}{tripState.result.method}</p>
+    </> : <p>{tripState.status === "error" ? `Commute times unavailable: ${tripState.message}` : "Calculating travel times for every neighbourhood…"}</p>,
+      source: tripState.status === "ready" && tripState.result.source ? `${tripState.result.source.publisher}, ${tripState.result.source.title}` : undefined }] : []),
     ...(showLandUse && selectedName ? [{ id: "land-use", title: `Zoning in ${selectedName}`, content: <LandUseKey result={landUseResult} />,
       source: landUseResult?.landUse?.source ? `${landUseResult.landUse.source.publisher}, ${landUseResult.landUse.source.title} (amendments to June 2023). What land is zoned for, not what is built.` : undefined }] : []),
     ...(activeNearby.length ? [{ id: "nearby", title: "Nearby places", content: <>
@@ -175,7 +217,7 @@ export default function HousingMap({ selection, onSelectionChange }: {
     <MapView selected={selected?.place ?? null} boundaries={boundaries} selectedGeographyId={selection?.geographyId}
       onGeographyClick={(geographyId) => { if (selection) onSelectionChange({ ...selection, geographyId }); }}
       onPlaceDismiss={() => { setSelected(null); setNotice(""); }}
-      show3dObjects={show3d} showTransit={showTransit} showBoundaries={showBoundaries} amenities={points} landUse={showLandUse ? landUseResult?.landUse?.features : null} parks={showParks ? parksResult?.parks?.outlines : null} shading={showPopulation ? current?.layer?.values : null} className={styles.map} />
+      show3dObjects={show3d} showTransit={showTransit} showBoundaries={showBoundaries} amenities={points} landUse={showLandUse ? landUseResult?.landUse?.features : null} parks={showParks ? parksResult?.parks?.outlines : null} shading={showPopulation ? populationLayer : commuteLayer} className={styles.map} />
     <div className={styles.topRow}>
       <LayersPanel groups={layerGroups} />
       <div className={styles.search}>
