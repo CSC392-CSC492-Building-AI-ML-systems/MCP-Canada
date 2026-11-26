@@ -27,8 +27,8 @@ from api.mcp_canada_cache import fetch_from_mcp_canada
 from api.models import Geography, Indicator, Observation, SourceRelease, SourceTableRow
 
 TOOL = "toronto_compare_neighbourhoods"
-YEARS = (2006, 2011, 2016, 2021)  # 2001 is not in MCP-Canada; it stays on the CSV.
-GEOGRAPHY_SET = {2006: "toronto-140", 2011: "toronto-140", 2016: "toronto-140", 2021: "toronto-158"}
+YEARS = (2001, 2006, 2011, 2016, 2021)
+GEOGRAPHY_SET = {2001: "toronto-140", 2006: "toronto-140", 2011: "toronto-140", 2016: "toronto-140", 2021: "toronto-158"}
 # Keys in each MCP-Canada row that are not neighbourhood columns.
 META_KEYS = {"year", "_id", "Category", "Topic", "Data Source", "Characteristic", "City of Toronto"}
 MAX_AGE = timedelta(days=30)
