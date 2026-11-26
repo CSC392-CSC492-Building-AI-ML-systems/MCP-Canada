@@ -91,6 +91,13 @@
 .scoreRow > div span:last-child { font-size: 10px; color: #826a4a; }
 .scoreTrack { display: block; background: var(--cream); height: 6px; border-radius: 3px; }
 .needsTable { table-layout: fixed; font-size: 11px; }
+.closestWalks { margin-top: 8px; font-size: 11px; color: var(--muted); }
+.closestWalks summary { cursor: pointer; color: var(--ink); font-weight: 600; padding: 4px 0; }
+.closestWalks h3 { margin: 8px 0 3px; font-size: 11px; color: var(--ink); }
+.closestWalks ol { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.closestWalks li { display: flex; justify-content: space-between; gap: 10px; }
+.closestWalks li span:first-child { min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+.closestWalks li span:last-child { flex-shrink: 0; text-align: right; }
 .needsTable caption { text-align: left; color: var(--muted); font-size: 11px; padding-bottom: 7px; }
 .needsTable th,.needsTable td { padding: 10px 0; border-bottom: 1px solid #d6cfba; font-size: 11px; text-align: right; color: var(--muted); }
 .needsTable th:first-child { width: 35%; text-align: left; }

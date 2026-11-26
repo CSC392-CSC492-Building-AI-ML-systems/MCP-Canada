@@ -141,6 +141,13 @@ scored. The 2001–2016 equivalents are not yet reviewed, so these rows are blan
 `area-within-1km-km2` (under each boundary release) is the size of that area, so the compare
 page can rank place densities rather than raw counts, which favour large neighbourhoods.
 
+**Zoning** (`zoning-areas.geojson`, City of Toronto Zoning By-law 569-2013, amendments to
+June 18, 2023) is staged as source rows only: 11,719 zone polygons with all their
+attributes. No observations are derived at import. The map's land-use layer and
+neighbourhood shares are calculated on request by `backend/api/land_use.py`. Zoning is
+permitted use, not actual use, and a current snapshot. Lands still under former municipal
+by-laws are not in the file, and neither are large City parks such as High Park.
+
 **Toronto Police crime rates** (`tps-crime-*`) hold published counts and rates per
 100,000 for nine offence types, 2014–2025, on the 158 neighbourhoods. Population
 (the TPS estimate, not Census) is published only for 2025. GTFS route/schedule files remain available in the raw feed

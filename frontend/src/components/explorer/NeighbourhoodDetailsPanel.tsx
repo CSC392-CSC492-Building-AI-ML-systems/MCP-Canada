@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { formatDistance, placeText, type AmenityCategory } from "@/lib/amenities";
+import { readNearby, subscribeNearby, type NearbySnapshot } from "@/lib/nearbyStore";
 import { loadComparisonExtras, type ComparisonExtras } from "../workflow/comparison-extras";
 import { tripMinutes, useCommutes } from "../workflow/commutes";
 import { explainScore, FACTORS, scoreBreakdown, screenScore, type Factor } from "../workflow/scoring";
@@ -105,8 +107,8 @@ export function NeighbourhoodDetailsPanel({ profile, catalog, onCompare, saved, 
           : FACTORS.map(f => <div className={styles.scoreRow} key={f.key}><div><span>{f.label}</span><span>{preferences ? "…" : "No profile"}</span></div><span className={styles.scoreTrack} /></div>)}
         {breakdown && <details><summary>How each factor is scored</summary>{FACTORS.map(f => <p key={f.key}><strong>{f.label}</strong>: {f.method}</p>)}</details>}
       </section>
-      <section className={styles.panelSection}><h2>Everyday needs</h2><table className={styles.needsTable}><caption>Nearby distances have not been calculated.</caption><thead><tr><th>Amenity</th><th>≤ 1 km</th><th>Nearest</th><th>Walk</th></tr></thead><tbody>{['Schools', 'Groceries', 'Transit stops', 'Parks'].map(name => <tr key={name}><th scope="row">{name}</th><td>—</td><td>—</td><td>—</td></tr>)}</tbody></table></section>
-      <section className={styles.missingNotice}><h2>Missing data</h2><p>A dash means unavailable, never zero. Nearby distances are not calculated here, and factors without data are left out of the match score. Travel times are present-day and start from a central point in the neighbourhood. {costValue === null && `${profile.year} housing costs are unavailable here. `}Current amenity records are not evidence of past services.</p></section>
+      <EverydayNeeds geographyId={profile.geography.id} />
+      <section className={styles.missingNotice}><h2>Missing data</h2><p>A dash means unavailable, never zero. Factors without data are left out of the match score. Travel times are present-day and start from a central point in the neighbourhood. {costValue === null && `${profile.year} housing costs are unavailable here. `}Current amenity records are not evidence of past services.</p></section>
       <section className={styles.contextCard}><h2>Historical context</h2><p className={styles.kicker}>TIME LENS · {profile.year} CENSUS</p><p>How did housing costs and household income shape everyday life here?</p><p className={styles.caption}>No verified historical accounts linked. This is an inquiry prompt, not an explanation of what caused change.</p></section>
       <section className={styles.panelSection} aria-labelledby="housing-title">
         <div className={styles.sectionHeading}><h2 id="housing-title">Housing &amp; affordability</h2><span className={styles.smallPill}>{profile.year}</span></div>
@@ -132,4 +134,41 @@ export function NeighbourhoodDetailsPanel({ profile, catalog, onCompare, saved, 
     </div>
     <footer className={styles.panelActions}><button type="button" className={styles.primaryButton} onClick={onCompare} disabled={!onCompare || saved || limitReached}>{saved ? 'Added to compare ✓' : limitReached ? '5 places saved' : 'Add to compare'}</button><button type="button" className={styles.secondaryButton} onClick={onAskTeacher} disabled={!onAskTeacher} title={!onAskTeacher ? 'AI teacher is not connected yet' : undefined}>Ask the AI teacher</button></footer>
   </aside>;
+}
+
+const NEEDS: [AmenityCategory | "park", string][] = [["school", "Schools"], ["grocery", "Groceries"], ["transit_stop", "Transit stops"], ["library", "Libraries"], ["park", "Parks"]];
+/** Nearest present-day places, as calculated by the map for this same neighbourhood. */
+function EverydayNeeds({ geographyId }: { geographyId: string }) {
+  const snapshot = useSyncExternalStore(subscribeNearby, readNearby, () => null);
+  return <EverydayNeedsTable geographyId={geographyId} snapshot={snapshot} />;
+}
+/** Shows the snapshot only when it is for this neighbourhood, so a stale one never appears. */
+export function EverydayNeedsTable({ geographyId, snapshot }: { geographyId: string; snapshot: NearbySnapshot }) {
+  const nearby = snapshot?.geographyId === geographyId ? snapshot : null;
+  const caption = nearby
+    ? `Present-day locations${nearby.asOf ? ` as of ${nearby.asOf}` : ""}, not historical. Walks start from ${nearby.originLabel}. ${nearby.routed
+      ? "Nearest and Walk follow streets and paths (Mapbox walking routes; parks to their nearest edge)."
+      : "Street routes are unavailable, so Nearest and Walk are straight-line estimates (~)."} “≤ 1 km” counts places within 1 km in a straight line.`
+    : "Nearby distances appear once the map has loaded this neighbourhood.";
+  return <section className={styles.panelSection}><h2>Everyday needs</h2><table className={styles.needsTable}><caption>{caption}</caption>
+    <thead><tr><th>Amenity</th><th>≤ 1 km</th><th>Nearest</th><th>Walk</th></tr></thead>
+    <tbody>{NEEDS.map(([category, name]) => {
+      const s = nearby ? nearby.summaries[category] : null;
+      const why = !s ? "Not calculated yet" : s.state === "loading" ? "Loading" : s.state === "error" ? s.message
+        : s.state === "not_loaded" ? "Not loaded in this database" : !s.nearest ? "None nearby" : undefined;
+      const ok = s?.state === "ok" ? s : null;
+      return <tr key={name} title={why}><th scope="row">{name}</th>
+        <td>{ok ? ok.within : "—"}</td>
+        <td title={ok?.nearest ? `${ok.nearest.name}${ok.nearest.estimated ? " (straight-line estimate)" : " (by street)"}` : undefined}>
+          {!ok?.nearest ? "—" : !ok.nearest.estimated && ok.nearest.metres === 0 ? "Inside" : `${ok.nearest.estimated ? "~" : ""}${formatDistance(ok.nearest.metres)}`}</td>
+        <td>{!ok?.nearest ? "—" : `${ok.nearest.estimated ? "~" : ""}${ok.nearest.minutes} min`}</td></tr>;
+    })}</tbody></table>
+    {nearby && NEEDS.some(([category]) => { const s = nearby.summaries[category]; return s.state === "ok" && s.ranked.length > 0; }) && <details className={styles.closestWalks}>
+      <summary>Closest walks for each</summary>
+      {NEEDS.map(([category, name]) => { const s = nearby.summaries[category];
+        return s.state === "ok" && s.ranked.length > 0 && <div key={category}><h3>{name}</h3>
+          <ol>{s.ranked.slice(0, 3).map(p => <li key={`${p.name}|${p.straightMetres}`}><span>{p.name}</span><span>{placeText(p)}</span></li>)}</ol></div>; })}
+    </details>}
+    {nearby && Object.values(nearby.summaries).some(s => s.state === "not_loaded") && <p className={styles.caption}>Some lists are not loaded in this database yet; their rows show a dash, not zero.</p>}
+  </section>;
 }
