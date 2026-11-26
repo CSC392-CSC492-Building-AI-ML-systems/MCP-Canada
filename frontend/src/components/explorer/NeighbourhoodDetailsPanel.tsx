@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { formatDistance, placeText, type AmenityCategory } from "@/lib/amenities";
 import { readNearby, subscribeNearby, type NearbySnapshot } from "@/lib/nearbyStore";
@@ -8,6 +9,8 @@ import { explainScore, FACTORS, scoreBreakdown, screenScore, type Factor } from 
 import { useTeacherScores } from "../workflow/Teacher";
 import { PROFILE_KEY, parseProfile, readSession, subscribeSession } from "../workflow/state";
 import { TripValue, tripNote } from "../workflow/TripCells";
+import { RentalContext } from "./RentalContext";
+import { NeighbourhoodMetrics } from "./NeighbourhoodMetrics";
 import { affordability } from "./affordability";
 import type { Catalog } from "./data";
 import type { Measurement, NeighbourhoodProfile } from "./types";
@@ -88,26 +91,40 @@ export function NeighbourhoodDetailsPanel({ profile, catalog, onCompare, saved, 
       <header className={styles.neighbourhoodHeading}><div><p className={styles.kicker}>TORONTO · {historical ? "HISTORICAL 140" : "CURRENT 158"}</p><h1 id="neighbourhood-name">{profile.geography.name}</h1><p className={styles.caption}>{profile.year} Census · Neighbourhood {profile.geography.code}</p></div><div className={styles.scoreBadge} aria-label={breakdown?.score != null ? `Match score ${breakdown.score} out of 100` : "Match score not available"}><strong>{breakdown?.score ?? "—"}</strong><span>/ 100</span></div></header>
       <section className={styles.explanation}><h2><span aria-hidden="true">✦</span> Your affordability snapshot</h2><p>{explanation}</p></section>
       <section className={styles.explanation} aria-labelledby="why-score"><h2 id="why-score"><span aria-hidden="true">✦</span> Why this score</h2>
-        {!preferences ? <p>Complete your profile to see how well this neighbourhood matches your budget, trips and priorities.</p>
+        {!preferences ? <p><Link href="/housing/profile/">Set up your profile</Link> to see how this neighbourhood fits your budget, trips and priorities.</p>
           : extrasLoading ? <p role="status">Working out the match score…</p>
           : <ul>{why.map(line => <li key={line}>{line}</li>)}</ul>}
       </section>
       <div className={styles.quickStats}>
-        {[['Shelter / mo.', display(cost)], ['Income share', result.incomeShare === null ? '—' : `${result.incomeShare.toFixed(1)}%`]].map(([label,value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
-        {(['work', 'school'] as const).map(trip => <div key={trip}><span>To {trip}</span><strong><TripValue state={commutes[trip]} id={profile.geography.id} /></strong></div>)}
+        {[['Shelter / mo.', display(cost)]].map(([label,value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+        <div><span>Income share</span>{result.incomeShare !== null
+          ? <strong>{result.incomeShare.toFixed(1)}%</strong>
+          : !preferences?.income.trim() ? <Link href="/housing/profile/">Add income</Link>
+          : <small>Shelter cost unavailable for {profile.year}</small>}</div>
+        {(['work', 'school'] as const).map(trip => <div key={trip}><span>To {trip}</span>
+          {commutes[trip].status === "no-destination" ? <Link href="/housing/profile/">Add {trip} address</Link>
+            : <strong><TripValue state={commutes[trip]} id={profile.geography.id} /></strong>}</div>)}
       </div>
       {(['work', 'school'] as const).some(trip => commutes[trip].status !== 'no-destination') || preferences
         ? <p className={styles.tripNote}>{(['work', 'school'] as const).map(trip => `To ${trip}${preferences ? ` (${preferences.mode.toLowerCase()})` : ''}: ${tripNote(trip, commutes[trip])}.`).join(' ')}</p>
         : <p className={styles.tripNote}>Add work or school addresses in your profile to see travel times.</p>}
       <section className={styles.panelSection}><h2>Score breakdown</h2>
+        {!preferences ? <div className={styles.profilePrompt}>
+          <p>Add your rent budget and choose what matters to you to calculate a personal match score.</p>
+          <Link href="/housing/profile/">Set up your profile →</Link>
+          <p className={styles.caption}>Income and destination addresses are optional. Each available factor uses the importance you select.</p>
+        </div> : <>
         <p className={styles.caption}>{breakdown && breakdown.coverage.weighted
           ? `Based on ${breakdown.coverage.used} of the ${breakdown.coverage.weighted} factors you weighted. Factors without data are left out and the others share their weight; nothing is counted as zero.`
           : "Each factor is scored 0–100 and weighted by your profile."}</p>
         {breakdown ? breakdown.factors.map(f => <FactorRow key={f.key} factor={f} />)
-          : FACTORS.map(f => <div className={styles.scoreRow} key={f.key}><div><span>{f.label}</span><span>{preferences ? "…" : "No profile"}</span></div><span className={styles.scoreTrack} /></div>)}
+          : FACTORS.map(f => <div className={styles.scoreRow} key={f.key}><div><span>{f.label}</span><span>Loading…</span></div><span className={styles.scoreTrack} /></div>)}
         {breakdown && <details><summary>How each factor is scored</summary>{FACTORS.map(f => <p key={f.key}><strong>{f.label}</strong>: {f.method}</p>)}</details>}
+        </>}
       </section>
       <EverydayNeeds geographyId={profile.geography.id} />
+      <NeighbourhoodMetrics population={profile.metrics.population} year={profile.year} extras={placeExtras}
+        loading={extrasLoading} sources={extras?.key === extrasKey ? extras.value?.sources ?? [] : []} />
       <section className={styles.missingNotice}><h2>Missing data</h2><p>A dash means unavailable, never zero. Factors without data are left out of the match score. Travel times are present-day and start from a central point in the neighbourhood. {costValue === null && `${profile.year} housing costs are unavailable here. `}Current amenity records are not evidence of past services.</p></section>
       <section className={styles.contextCard}><h2>Historical context</h2><p className={styles.kicker}>TIME LENS · {profile.year} CENSUS</p><p>How did housing costs and household income shape everyday life here?</p><p className={styles.caption}>No verified historical accounts linked. This is an inquiry prompt, not an explanation of what caused change.</p></section>
       <section className={styles.panelSection} aria-labelledby="housing-title">
@@ -115,11 +132,12 @@ export function NeighbourhoodDetailsPanel({ profile, catalog, onCompare, saved, 
         <p className={styles.caption}>Published neighbourhood data · nominal dollars</p>
         <dl className={styles.measurements}>
           <div><dt>{cost.statistic === "median" ? "Median renter shelter cost" : profile.year < 2011 ? "Average gross rent" : "Average renter shelter cost"}<SourceNote measurement={cost} /></dt><dd>{display(cost)}<small>/ month</small></dd></div>
-          <div><dt>Median household income<SourceNote measurement={householdIncome} /></dt><dd>{display(householdIncome)}<small>/ year</small></dd></div>
+          <div><dt>Average household income<SourceNote measurement={householdIncome} /></dt><dd>{display(householdIncome)}<small>/ year</small></dd></div>
           <div><dt>{burden.unit === "households" ? "Households spending ≥30% on rent" : "Renters spending ≥30% on shelter"}<SourceNote measurement={burden} /></dt><dd>{display(burden)}</dd></div>
         </dl>
         <p className={styles.caption}>Shelter costs include applicable utilities. This is a Census benchmark across rented dwellings, not an advertised rent.</p>
       </section>
+      <RentalContext catalog={catalog} />
       <section className={styles.panelSection} aria-labelledby="history-title"><h2 id="history-title">Housing through time</h2><p className={styles.caption}>Same neighbourhood boundary in every year · no filled gaps</p>
         <div className={styles.historyBars}>{profile.history.map(h => { const value = measuredNumber(h.cost); return <div key={h.year} aria-label={`${h.year}: ${value === null ? 'unavailable' : money(value)}`}><span>{h.year}</span><span className={styles.historyTrack}>{value !== null && <span style={{ width: `${value / historyMax * 100}%` }} />}</span><strong>{value === null ? '—' : money(value)}</strong></div>; })}</div>
         <p className={styles.caption}>Average renter shelter cost in every year (called gross rent in 2001 and 2006); the 2016 neighbourhood profile does not publish it. Dollars are nominal. Use “Compare this location across time” to see the change.</p>{profile.boundary_note && <p className={styles.caption}>{profile.boundary_note}</p>}

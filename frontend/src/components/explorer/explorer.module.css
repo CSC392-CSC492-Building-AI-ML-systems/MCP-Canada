@@ -196,3 +196,8 @@
 .scoreTrack > span { display: block; height: 100%; background: #6d8c54; border-radius: 3px; }
 .tripNote { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
 .quickStats small { display: block; font-size: 10px; font-weight: 400; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
+
+.quickStats a { color: var(--green); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+.profilePrompt { padding: 14px; border-radius: 10px; background: var(--cream); }
+.profilePrompt a { color: var(--green); font-weight: 700; }
+.profilePrompt p:last-child { margin-bottom: 0; }
