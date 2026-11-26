@@ -645,3 +645,183 @@ def cpi_real_change(request):
         **result.as_dict(),
         "source": table.source.as_dict() if table.source else None,
     })
+
+
+def _cpi_table_or_error():
+    """The CPI table, or a 503 response when CPI is not loaded."""
+    try:
+        return inflation.load_cpi_table(), None
+    except inflation.InflationDataUnavailable as exc:
+        return None, JsonResponse({"error": str(exc)}, status=503)
+
+
+def _cpi_source(table):
+    """The source block every CPI response carries."""
+    return table.source.as_dict() if table.source else None
+
+
+@require_GET
+def cpi_convert_month(request):
+    """Convert an amount between two exact months using the monthly CPI.
+
+    Required query parameters: amount, from_period and to_period (each YYYY-MM).
+    """
+    try:
+        amount = inflation.parse_amount(request.GET.get("amount"), "amount")
+        from_period = inflation.parse_month_period(request.GET.get("from_period"), "from_period")
+        to_period = inflation.parse_month_period(request.GET.get("to_period"), "to_period")
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    table, error = _cpi_table_or_error()
+    if error:
+        return error
+    result = inflation.adjust_between_months(amount, from_period, to_period, table)
+    return JsonResponse({
+        **result.as_dict(),
+        "from_period": inflation.period_label(*from_period),
+        "to_period": inflation.period_label(*to_period),
+        "source": _cpi_source(table),
+    })
+
+
+@require_GET
+def cpi_latest(request):
+    """Convert an amount from a complete year into dollars of the latest twelve published months.
+
+    Required query parameters: amount and from_year. The response names the months it used.
+    """
+    try:
+        amount = inflation.parse_amount(request.GET.get("amount"), "amount")
+        from_year = inflation.parse_year(request.GET.get("from_year"), "from_year")
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    table, error = _cpi_table_or_error()
+    if error:
+        return error
+    result, trailing = inflation.adjust_to_latest_months(amount, from_year, table)
+    return JsonResponse({
+        **result.as_dict(),
+        "latest_twelve_months": trailing.as_dict() if trailing else None,
+        "note": "Uses the average of the latest twelve published months, not a calendar-year CPI.",
+        "source": _cpi_source(table),
+    })
+
+
+@require_GET
+def cpi_series(request):
+    """Convert several yearly amounts into one year's dollars.
+
+    Required query parameters: values (YEAR:AMOUNT pairs, such as 2011:1000,2021:1300) and to_year.
+    """
+    try:
+        pairs = inflation.parse_series(request.GET.get("values"), "values")
+        to_year = inflation.parse_year(request.GET.get("to_year"), "to_year")
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    table, error = _cpi_table_or_error()
+    if error:
+        return error
+    results = inflation.adjust_series(pairs, to_year, table)
+    return JsonResponse({
+        "to_year": to_year,
+        "values": [result.as_dict() for result in results],
+        "adjusted_count": sum(1 for result in results if result.was_adjusted),
+        "not_adjusted_count": sum(1 for result in results if not result.was_adjusted),
+        "source": _cpi_source(table),
+    })
+
+
+@require_GET
+def cpi_rates(request):
+    """Year-over-year inflation for every complete year, plus an optional average yearly rate.
+
+    Optional query parameters: from_year and to_year (both, for the average rate) and base_year
+    (to show every year's CPI with base_year = 100).
+    """
+    try:
+        from_year = _optional_year(request, "from_year")
+        to_year = _optional_year(request, "to_year")
+        base_year = _optional_year(request, "base_year")
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    if (from_year is None) != (to_year is None):
+        return JsonResponse({"error": "Give both from_year and to_year, or neither."}, status=400)
+    table, error = _cpi_table_or_error()
+    if error:
+        return error
+
+    response = {"year_over_year": inflation.year_over_year(table), "source": _cpi_source(table)}
+
+    if from_year is not None:
+        rate = inflation.annualized_inflation(from_year, to_year, table)
+        total = inflation.inflation_between(from_year, to_year, table)
+        response["between"] = {
+            "from_year": from_year,
+            "to_year": to_year,
+            "total_inflation_percent": inflation.decimal_to_string(total, places=2),
+            "average_yearly_inflation_percent": inflation.decimal_to_string(rate, places=2),
+            "reason": None if rate is not None else (
+                table.missing_reason(from_year) if table.value_for(from_year) is None else table.missing_reason(to_year)
+            ),
+        }
+
+    if base_year is not None:
+        try:
+            rebased = inflation.rebase(table, base_year)
+        except inflation.InvalidInflationRequest as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        response["rebased"] = {
+            "base_year": base_year,
+            "index": [
+                {"year": year, "value": inflation.decimal_to_string(value, places=2)}
+                for year, value in sorted(rebased.items())
+            ],
+        }
+
+    trailing = inflation.latest_trailing_cpi(table)
+    response["latest_twelve_months"] = trailing.as_dict() if trailing else None
+    return JsonResponse(response)
+
+
+@require_GET
+def cpi_census_adjust(request):
+    """Adjust a Census value from the year it actually refers to.
+
+    Required query parameters: amount, census_year, measure (income, after_tax_income,
+    shelter_cost or rent) and to_year. Census income refers to the year before the Census.
+    """
+    try:
+        amount = inflation.parse_amount(request.GET.get("amount"), "amount")
+        census_year = inflation.parse_year(request.GET.get("census_year"), "census_year")
+        to_year = inflation.parse_year(request.GET.get("to_year"), "to_year")
+        measure = (request.GET.get("measure") or "").strip()
+        reference_year = inflation.census_reference_year(census_year, measure)
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    table, error = _cpi_table_or_error()
+    if error:
+        return error
+    result = inflation.adjust_amount(amount, reference_year, to_year, table)
+    return JsonResponse({
+        **result.as_dict(),
+        "census_year": census_year,
+        "measure": measure,
+        "reference_year": reference_year,
+        "source": _cpi_source(table),
+    })
+
+
+@require_GET
+def cpi_affordability_trend(request):
+    """Rent as a share of income across years, and whether rent outpaced income after inflation.
+
+    Required query parameter: points (YEAR:MONTHLY_RENT:ANNUAL_INCOME items, at least two).
+    """
+    try:
+        triples = inflation.parse_affordability_points(request.GET.get("points"), "points")
+    except inflation.InvalidInflationRequest as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    table, error = _cpi_table_or_error()
+    if error:
+        return error
+    return JsonResponse({**inflation.affordability_trend(triples, table), "source": _cpi_source(table)})

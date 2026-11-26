@@ -197,6 +197,8 @@ class CpiTable:
 
     years: dict[int, AnnualCpi] = field(default_factory=dict)
     source: CpiSource | None = None
+    #: Every published month, keyed by (year, month). Empty when built from annual values only.
+    months: dict[tuple[int, int], Decimal] = field(default_factory=dict)
 
     def value_for(self, year: int) -> Decimal | None:
         """The year's annual CPI, or None when the year is incomplete or not covered."""
@@ -394,7 +396,7 @@ def load_cpi_table(source_id: str | None = None) -> CpiTable:
     months, source = load_monthly_cpi(source_id)
     if not months:
         raise InflationDataUnavailable("The CPI source has no monthly observations.")
-    return CpiTable(years=annual_cpi_from_months(months), source=source)
+    return CpiTable(years=annual_cpi_from_months(months), source=source, months=months_by_period(months))
 
 
 def cpi_indicator_label() -> str | None:
@@ -540,5 +542,410 @@ def table_as_dict(table: CpiTable, start_year: int | None = None, end_year: int 
         "latest_complete_year": table.latest_complete_year(),
         "earliest_complete_year": table.earliest_complete_year(),
         "years": entries,
+        "latest_twelve_months": latest_twelve_months_dict(table),
         "source": table.source.as_dict() if table.source else None,
+    }
+
+
+def latest_twelve_months_dict(table: CpiTable) -> dict | None:
+    """The latest twelve consecutive months as JSON, or None when there is no such run."""
+    trailing = latest_trailing_cpi(table)
+    if trailing is None:
+        return None
+    return trailing.as_dict()
+
+
+# =========================================================================== deeper calculations
+#
+# Everything below builds on the annual table above. None of it is used by a page yet.
+
+
+# --------------------------------------------------------------------------- months
+
+def months_by_period(months: list[MonthlyCpi]) -> dict[tuple[int, int], Decimal]:
+    """Monthly CPI keyed by (year, month). A duplicated month keeps its first value."""
+    table: dict[tuple[int, int], Decimal] = {}
+    for entry in months:
+        key = (entry.year, entry.month)
+        if key not in table:
+            table[key] = entry.value
+    return table
+
+
+def period_label(year: int, month: int) -> str:
+    """A 'YYYY-MM' label for a month."""
+    return f"{year:04d}-{month:02d}"
+
+
+def parse_month_period(raw, name: str = "period") -> tuple[int, int]:
+    """Read a 'YYYY-MM' month from user input. Raises InvalidInflationRequest with a clear message."""
+    if raw is None or str(raw).strip() == "":
+        raise InvalidInflationRequest(f"Missing {name}. Give a month as YYYY-MM, such as 2011-05.")
+    parsed = parse_period(str(raw).strip())
+    if parsed is None:
+        raise InvalidInflationRequest(f"{name} must be a month written as YYYY-MM, such as 2011-05.")
+    year, month = parsed
+    if year < EARLIEST_ACCEPTED_YEAR or year > LATEST_ACCEPTED_YEAR:
+        raise InvalidInflationRequest(
+            f"{name} must be between {EARLIEST_ACCEPTED_YEAR} and {LATEST_ACCEPTED_YEAR}, not {year}."
+        )
+    return year, month
+
+
+def adjust_between_months(
+    amount: Decimal,
+    from_period: tuple[int, int],
+    to_period: tuple[int, int],
+    table: CpiTable,
+) -> AdjustmentResult:
+    """Convert an amount between two exact months, using the monthly CPI.
+
+    This is more precise than the annual conversion when a value refers to a
+    specific month, for example Census day in May. The result reports the years
+    of the two months; the reason names the month when one is missing.
+    """
+    from_year, from_month = from_period
+    to_year, to_month = to_period
+    if from_period == to_period:
+        return AdjustmentResult(
+            original_value=amount,
+            from_year=from_year,
+            to_year=to_year,
+            status=STATUS_SAME_YEAR,
+            adjusted_value=amount,
+            factor=Decimal(1),
+        )
+    from_cpi = table.months.get(from_period)
+    if from_cpi is None:
+        return AdjustmentResult(
+            original_value=amount,
+            from_year=from_year,
+            to_year=to_year,
+            status=STATUS_NOT_ADJUSTED,
+            reason=f"No CPI is published for {period_label(from_year, from_month)}.",
+        )
+    to_cpi = table.months.get(to_period)
+    if to_cpi is None:
+        return AdjustmentResult(
+            original_value=amount,
+            from_year=from_year,
+            to_year=to_year,
+            status=STATUS_NOT_ADJUSTED,
+            reason=f"No CPI is published for {period_label(to_year, to_month)}.",
+        )
+    factor = to_cpi / from_cpi
+    return AdjustmentResult(
+        original_value=amount,
+        from_year=from_year,
+        to_year=to_year,
+        status=STATUS_ADJUSTED,
+        adjusted_value=amount * factor,
+        factor=factor,
+    )
+
+
+# --------------------------------------------------------------------------- latest 12 months
+
+@dataclass(frozen=True)
+class TrailingCpi:
+    """The average CPI of the most recent twelve consecutive published months."""
+
+    value: Decimal
+    first_period: str
+    last_period: str
+
+    @property
+    def label(self) -> str:
+        """For example 'the 12 months from 2025-10 to 2026-09'."""
+        return f"the 12 months from {self.first_period} to {self.last_period}"
+
+    def as_dict(self) -> dict:
+        """JSON-ready form."""
+        return {
+            "value": decimal_to_string(self.value, places=4),
+            "first_period": self.first_period,
+            "last_period": self.last_period,
+            "label": self.label,
+        }
+
+
+def previous_month(year: int, month: int) -> tuple[int, int]:
+    """The month before the given one."""
+    if month == 1:
+        return year - 1, 12
+    return year, month - 1
+
+
+def latest_trailing_cpi(table: CpiTable) -> TrailingCpi | None:
+    """The average of the latest twelve consecutive months, or None if there is no such run.
+
+    This is not an annual CPI. It lets a value be shown in near-current dollars
+    while the current calendar year is still incomplete, and it always says
+    which months it covers.
+    """
+    if not table.months:
+        return None
+    latest = max(table.months)
+    periods = [latest]
+    while len(periods) < MONTHS_PER_YEAR:
+        periods.append(previous_month(*periods[-1]))
+    values = [table.months.get(period) for period in periods]
+    if any(value is None for value in values):
+        return None
+    average = sum(values, Decimal(0)) / Decimal(MONTHS_PER_YEAR)
+    first = periods[-1]
+    return TrailingCpi(value=average, first_period=period_label(*first), last_period=period_label(*latest))
+
+
+def adjust_to_latest_months(amount: Decimal, from_year: int, table: CpiTable) -> tuple[AdjustmentResult, TrailingCpi | None]:
+    """Convert an amount from a complete year into dollars of the latest twelve months."""
+    trailing = latest_trailing_cpi(table)
+    from_cpi = table.value_for(from_year)
+    to_year = int(trailing.last_period[:4]) if trailing else from_year
+    if trailing is None:
+        return AdjustmentResult(
+            original_value=amount,
+            from_year=from_year,
+            to_year=to_year,
+            status=STATUS_NOT_ADJUSTED,
+            reason="The loaded CPI does not have twelve consecutive recent months.",
+        ), None
+    if from_cpi is None:
+        return AdjustmentResult(
+            original_value=amount,
+            from_year=from_year,
+            to_year=to_year,
+            status=STATUS_NOT_ADJUSTED,
+            reason=table.missing_reason(from_year),
+        ), trailing
+    factor = trailing.value / from_cpi
+    return AdjustmentResult(
+        original_value=amount,
+        from_year=from_year,
+        to_year=to_year,
+        status=STATUS_ADJUSTED,
+        adjusted_value=amount * factor,
+        factor=factor,
+    ), trailing
+
+
+# --------------------------------------------------------------------------- rates and indexes
+
+def annualized_inflation(from_year: int, to_year: int, table: CpiTable) -> Decimal | None:
+    """The average yearly inflation rate between two years, as a percent (compound).
+
+    Prices rising 20% over 10 years is about 1.84% a year, not 2%, because each
+    year's rise builds on the last. None when either year has no CPI.
+    """
+    if from_year == to_year:
+        return Decimal(0)
+    from_cpi = table.value_for(from_year)
+    to_cpi = table.value_for(to_year)
+    if from_cpi is None or to_cpi is None:
+        return None
+    years = to_year - from_year
+    ratio = float(to_cpi / from_cpi)
+    rate = (ratio ** (1 / years) - 1) * 100
+    return Decimal(str(rate))
+
+
+def year_over_year(table: CpiTable) -> list[dict]:
+    """Each complete year's inflation compared with the year before.
+
+    A year whose previous year is incomplete or missing gets None, never an
+    estimate across a gap.
+    """
+    rows = []
+    for year in table.complete_years():
+        previous = table.value_for(year - 1)
+        current = table.value_for(year)
+        rate = None
+        if previous is not None and current is not None:
+            rate = (current / previous - Decimal(1)) * Decimal(100)
+        rows.append({
+            "year": year,
+            "annual_cpi": decimal_to_string(current, places=4),
+            "inflation_percent": decimal_to_string(rate, places=2),
+        })
+    return rows
+
+
+def rebase(table: CpiTable, base_year: int) -> dict[int, Decimal]:
+    """Every complete year's CPI on a new base where base_year = 100.
+
+    Raises InvalidInflationRequest when the base year has no complete CPI.
+    """
+    base = table.value_for(base_year)
+    if base is None:
+        raise InvalidInflationRequest(f"{base_year} cannot be the base year: {table.missing_reason(base_year)}")
+    return {year: table.value_for(year) / base * Decimal(100) for year in table.complete_years()}
+
+
+# --------------------------------------------------------------------------- Census reference years
+
+#: How far each kind of Census value's reference year is from the Census year.
+#: Census income (for example the 2021 Census) describes the previous calendar year (2020),
+#: while shelter costs and rents describe the Census year itself.
+CENSUS_REFERENCE_OFFSETS = {
+    "income": -1,
+    "after_tax_income": -1,
+    "shelter_cost": 0,
+    "rent": 0,
+}
+
+
+def census_reference_year(census_year: int, measure: str) -> int:
+    """The year a Census value actually refers to, so it is adjusted with the right CPI."""
+    if measure not in CENSUS_REFERENCE_OFFSETS:
+        known = ", ".join(sorted(CENSUS_REFERENCE_OFFSETS))
+        raise InvalidInflationRequest(f"Unknown Census measure {measure!r}. Use one of: {known}.")
+    return census_year + CENSUS_REFERENCE_OFFSETS[measure]
+
+
+def adjust_census_value(amount: Decimal, census_year: int, measure: str, to_year: int, table: CpiTable) -> AdjustmentResult:
+    """Adjust a Census value from the year it refers to (not just the Census year)."""
+    return adjust_amount(amount, census_reference_year(census_year, measure), to_year, table)
+
+
+# --------------------------------------------------------------------------- series
+
+def parse_series(raw, name: str = "values") -> list[tuple[int, Decimal]]:
+    """Read 'YEAR:AMOUNT' pairs separated by commas, such as '2011:1000,2021:1300'."""
+    if raw is None or str(raw).strip() == "":
+        raise InvalidInflationRequest(f"Missing {name}. Give YEAR:AMOUNT pairs, such as 2011:1000,2021:1300.")
+    pairs = []
+    seen = set()
+    for part in str(raw).split(","):
+        piece = part.strip()
+        if not piece:
+            continue
+        if piece.count(":") != 1:
+            raise InvalidInflationRequest(f"Each item in {name} must be YEAR:AMOUNT, not {piece!r}.")
+        year_text, amount_text = piece.split(":")
+        year = parse_year(year_text, f"year in {name}")
+        if year in seen:
+            raise InvalidInflationRequest(f"{year} appears more than once in {name}.")
+        seen.add(year)
+        pairs.append((year, parse_amount(amount_text, f"amount for {year}")))
+    if not pairs:
+        raise InvalidInflationRequest(f"Missing {name}. Give YEAR:AMOUNT pairs, such as 2011:1000,2021:1300.")
+    if len(pairs) > 50:
+        raise InvalidInflationRequest(f"{name} can hold at most 50 values.")
+    return pairs
+
+
+def adjust_series(pairs: list[tuple[int, Decimal]], to_year: int, table: CpiTable) -> list[AdjustmentResult]:
+    """Convert every (year, amount) pair into to_year dollars, oldest first."""
+    return [adjust_amount(amount, year, to_year, table) for year, amount in sorted(pairs)]
+
+
+# --------------------------------------------------------------------------- affordability over time
+
+#: The share of income the project uses as its affordability reference point (CMHC's 30%).
+AFFORDABILITY_GUIDELINE_PERCENT = Decimal(30)
+
+
+@dataclass(frozen=True)
+class AffordabilityPoint:
+    """Rent as a share of income in one year."""
+
+    year: int
+    monthly_rent: Decimal
+    annual_income: Decimal
+    share_of_income_percent: Decimal | None
+    meets_guideline: bool | None
+
+    def as_dict(self) -> dict:
+        """JSON-ready form."""
+        return {
+            "year": self.year,
+            "monthly_rent": decimal_to_string(self.monthly_rent, places=2),
+            "annual_income": decimal_to_string(self.annual_income, places=2),
+            "share_of_income_percent": decimal_to_string(self.share_of_income_percent, places=2),
+            "meets_guideline": self.meets_guideline,
+        }
+
+
+def affordability_point(year: int, monthly_rent: Decimal, annual_income: Decimal) -> AffordabilityPoint:
+    """Rent ÷ monthly income for one year. Rent and income are from the same year, so no CPI is needed."""
+    if annual_income <= 0:
+        return AffordabilityPoint(year, monthly_rent, annual_income, None, None)
+    share = monthly_rent / (annual_income / Decimal(12)) * Decimal(100)
+    return AffordabilityPoint(year, monthly_rent, annual_income, share, share <= AFFORDABILITY_GUIDELINE_PERCENT)
+
+
+def parse_affordability_points(raw, name: str = "points") -> list[tuple[int, Decimal, Decimal]]:
+    """Read 'YEAR:MONTHLY_RENT:ANNUAL_INCOME' triples separated by commas."""
+    if raw is None or str(raw).strip() == "":
+        raise InvalidInflationRequest(
+            f"Missing {name}. Give YEAR:MONTHLY_RENT:ANNUAL_INCOME items, such as 2011:1000:60000,2021:1300:72000."
+        )
+    triples = []
+    seen = set()
+    for part in str(raw).split(","):
+        piece = part.strip()
+        if not piece:
+            continue
+        bits = piece.split(":")
+        if len(bits) != 3:
+            raise InvalidInflationRequest(f"Each item in {name} must be YEAR:MONTHLY_RENT:ANNUAL_INCOME, not {piece!r}.")
+        year = parse_year(bits[0], f"year in {name}")
+        if year in seen:
+            raise InvalidInflationRequest(f"{year} appears more than once in {name}.")
+        seen.add(year)
+        triples.append((year, parse_amount(bits[1], f"rent for {year}"), parse_amount(bits[2], f"income for {year}")))
+    if len(triples) < 2:
+        raise InvalidInflationRequest(f"{name} needs at least two years to show a trend.")
+    if len(triples) > 50:
+        raise InvalidInflationRequest(f"{name} can hold at most 50 values.")
+    return sorted(triples)
+
+
+def affordability_trend(triples: list[tuple[int, Decimal, Decimal]], table: CpiTable) -> dict:
+    """How rent compared with income across years, and how each grew after inflation.
+
+    * The share of income needs no inflation adjustment, because each year's rent
+      and income are in that same year's dollars.
+    * The change in share, in percentage points, says whether rent became harder
+      or easier to afford relative to income.
+    * Rent and income growth are each given before and after inflation, so the
+      result can say whether rent outpaced income.
+    """
+    ordered = sorted(triples)
+    points = [affordability_point(year, rent, income) for year, rent, income in ordered]
+    first, last = ordered[0], ordered[-1]
+    first_point, last_point = points[0], points[-1]
+
+    share_change = None
+    if first_point.share_of_income_percent is not None and last_point.share_of_income_percent is not None:
+        share_change = last_point.share_of_income_percent - first_point.share_of_income_percent
+
+    rent = real_change(first[1], last[1], first[0], last[0], table)
+    income = real_change(first[2], last[2], first[0], last[0], table)
+
+    outpaced = None
+    if rent.nominal_change_percent is not None and income.nominal_change_percent is not None:
+        outpaced = rent.nominal_change_percent > income.nominal_change_percent
+
+    if share_change is None:
+        summary = "The share of income cannot be compared because an income is $0."
+    elif share_change > 0:
+        summary = (f"Rent took a larger share of income in {last[0]} than in {first[0]} "
+                   f"(up {decimal_to_string(share_change, 1)} percentage points).")
+    elif share_change < 0:
+        summary = (f"Rent took a smaller share of income in {last[0]} than in {first[0]} "
+                   f"(down {decimal_to_string(-share_change, 1)} percentage points).")
+    else:
+        summary = f"Rent took the same share of income in {first[0]} and {last[0]}."
+
+    return {
+        "points": [point.as_dict() for point in points],
+        "first_year": first[0],
+        "last_year": last[0],
+        "share_change_points": decimal_to_string(share_change, places=2),
+        "rent_change": rent.as_dict(),
+        "income_change": income.as_dict(),
+        "rent_outpaced_income": outpaced,
+        "guideline_percent": decimal_to_string(AFFORDABILITY_GUIDELINE_PERCENT, places=0),
+        "summary": summary,
     }

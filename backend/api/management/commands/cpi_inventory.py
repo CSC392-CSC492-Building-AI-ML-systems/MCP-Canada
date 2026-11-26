@@ -5,6 +5,7 @@ Usage, from backend/:
     uv run python manage.py cpi_inventory
     uv run python manage.py cpi_inventory --start-year 2011 --end-year 2021
     uv run python manage.py cpi_inventory --convert 1000 --from-year 2011 --to-year 2021
+    uv run python manage.py cpi_inventory --base-year 2021
 
 The table shows, for every year in the loaded CPI series, how many months were
 published, whether the year is complete, and its annual average. With
@@ -24,6 +25,7 @@ class Command(BaseCommand):
         parser.add_argument("--convert", help="An amount to convert, such as 1000.")
         parser.add_argument("--from-year", help="The year the amount is from.")
         parser.add_argument("--to-year", help="The year to convert the amount into.")
+        parser.add_argument("--base-year", help="Also show every year's CPI with this year = 100.")
 
     def handle(self, *args, **options):
         start_year = self._optional_year(options.get("start_year"), "start-year")
@@ -39,6 +41,11 @@ class Command(BaseCommand):
         self._print_source(table)
         self._print_table(table, start_year, end_year)
         self._print_summary(table)
+        self._print_latest(table)
+
+        base_year = self._optional_year(options.get("base_year"), "base-year")
+        if base_year is not None:
+            self._print_rebased(table, base_year, start_year, end_year)
 
         if options.get("convert") is not None:
             self._print_conversion(table, options)
@@ -69,7 +76,8 @@ class Command(BaseCommand):
 
     def _print_table(self, table, start_year, end_year):
         """One line per year: months published, status and annual average."""
-        header = f"{'Year':<6}{'Months':>8}  {'Status':<11}{'Annual CPI':>12}"
+        header = f"{'Year':<6}{'Months':>8}  {'Status':<11}{'Annual CPI':>12}{'Change':>10}"
+        yearly_changes = {row["year"]: row["inflation_percent"] for row in inflation.year_over_year(table)}
         self.stdout.write(header)
         self.stdout.write("-" * len(header))
         for year in sorted(table.years):
@@ -79,7 +87,11 @@ class Command(BaseCommand):
                 continue
             entry = table.years[year]
             value = inflation.decimal_to_string(entry.value, places=2) or "—"
-            self.stdout.write(f"{year:<6}{entry.months_counted:>8}  {entry.status:<11}{value:>12}")
+            change = yearly_changes.get(year)
+            change_text = f"{change}%" if change is not None else "—"
+            self.stdout.write(
+                f"{year:<6}{entry.months_counted:>8}  {entry.status:<11}{value:>12}{change_text:>10}"
+            )
         self.stdout.write("")
 
     def _print_summary(self, table):
@@ -114,3 +126,28 @@ class Command(BaseCommand):
             )
         else:
             self.stdout.write(f"${original} from {from_year} was not adjusted: {result.reason}")
+
+    def _print_latest(self, table):
+        """The latest twelve consecutive months, for near-current dollars."""
+        trailing = inflation.latest_trailing_cpi(table)
+        if trailing is None:
+            self.stdout.write("Latest 12 months: not available (no twelve consecutive recent months)")
+        else:
+            value = inflation.decimal_to_string(trailing.value, places=2)
+            self.stdout.write(f"Latest 12 months: {trailing.first_period} to {trailing.last_period}, average {value}")
+        self.stdout.write("")
+
+    def _print_rebased(self, table, base_year, start_year, end_year):
+        """Every complete year's CPI with base_year = 100."""
+        try:
+            rebased = inflation.rebase(table, base_year)
+        except inflation.InvalidInflationRequest as exc:
+            raise CommandError(str(exc)) from exc
+        self.stdout.write(f"CPI with {base_year} = 100")
+        for year in sorted(rebased):
+            if start_year is not None and year < start_year:
+                continue
+            if end_year is not None and year > end_year:
+                continue
+            self.stdout.write(f"{year:<6}{inflation.decimal_to_string(rebased[year], places=2):>10}")
+        self.stdout.write("")

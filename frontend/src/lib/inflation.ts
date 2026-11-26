@@ -70,7 +70,25 @@ export type AnnualCpiResponse = {
   latest_complete_year: number | null;
   earliest_complete_year: number | null;
   years: AnnualCpiRow[];
+  /** Average CPI of the latest twelve consecutive months, for near-current dollars. */
+  latest_twelve_months?: LatestTwelveMonthsRow | null;
   source: CpiSource | null;
+};
+
+/** The latest twelve consecutive months, as the backend reports them. */
+export type LatestTwelveMonthsRow = {
+  value: string;
+  first_period: string;
+  last_period: string;
+  label: string;
+};
+
+/** The latest twelve months, ready for calculations. */
+export type LatestTwelveMonths = {
+  value: number;
+  firstPeriod: string;
+  lastPeriod: string;
+  label: string;
 };
 
 /** Annual CPI ready for calculations: complete years only, plus why other years are missing. */
@@ -81,6 +99,8 @@ export type CpiTable = {
   gaps: Map<number, string>;
   latestCompleteYear: number | null;
   earliestCompleteYear: number | null;
+  /** Average of the latest twelve consecutive months; null when the backend gave none. */
+  latestTwelveMonths: LatestTwelveMonths | null;
   source: CpiSource | null;
 };
 
@@ -191,7 +211,28 @@ export function buildCpiTable(response: Pick<AnnualCpiResponse, "years"> & Parti
     gaps,
     latestCompleteYear: completeYears.length ? completeYears[completeYears.length - 1] : null,
     earliestCompleteYear: completeYears.length ? completeYears[0] : null,
+    latestTwelveMonths: readLatestTwelveMonths(response.latest_twelve_months),
     source: response.source ?? null,
+  };
+}
+
+/** Reads the latest-twelve-months block, keeping it only when its value is a positive number. */
+function readLatestTwelveMonths(row: LatestTwelveMonthsRow | null | undefined): LatestTwelveMonths | null {
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+  const value = Number(row.value);
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  if (typeof row.first_period !== "string" || typeof row.last_period !== "string") {
+    return null;
+  }
+  return {
+    value,
+    firstPeriod: row.first_period,
+    lastPeriod: row.last_period,
+    label: typeof row.label === "string" ? row.label : `the 12 months from ${row.first_period} to ${row.last_period}`,
   };
 }
 
@@ -463,4 +504,259 @@ export function loadAnnualCpi(fetcher: typeof fetch = fetch): Promise<CpiTable> 
 /** Forgets the loaded CPI, so the next `loadAnnualCpi` call fetches again (used by tests). */
 export function clearCpiCache(): void {
   cached = null;
+}
+
+// ================================================================== deeper calculations
+//
+// Everything below builds on the table above. None of it is used by a page yet.
+
+// ------------------------------------------------------------------ Census reference years
+
+/** Kinds of Census dollar values whose reference year is known. */
+export type CensusMeasure = "income" | "after_tax_income" | "shelter_cost" | "rent";
+
+/**
+ * How far each kind of Census value's reference year is from the Census year.
+ * Census income (for example in the 2021 Census) describes the previous calendar
+ * year (2020); shelter costs and rents describe the Census year itself.
+ */
+export const CENSUS_REFERENCE_OFFSETS: Record<CensusMeasure, number> = {
+  income: -1,
+  after_tax_income: -1,
+  shelter_cost: 0,
+  rent: 0,
+};
+
+/** The year a Census value actually refers to, so it is adjusted with the right CPI. */
+export function censusReferenceYear(censusYear: number, measure: CensusMeasure): number {
+  return censusYear + CENSUS_REFERENCE_OFFSETS[measure];
+}
+
+/** Adjusts a Census value from the year it refers to, not just the Census year. */
+export function adjustCensusValue(
+  amount: number | null | undefined,
+  censusYear: number,
+  measure: CensusMeasure,
+  toYear: number,
+  table: CpiTable,
+): Adjustment {
+  return adjustForInflation(amount, censusReferenceYear(censusYear, measure), toYear, table);
+}
+
+// ------------------------------------------------------------------ latest twelve months
+
+/** The result of converting into dollars of the latest twelve months. */
+export type LatestAdjustment = Adjustment & { period: LatestTwelveMonths | null };
+
+/**
+ * Converts an amount from a complete year into dollars of the latest twelve
+ * published months. Use this when the current calendar year is still
+ * incomplete; always show `period.label` beside the value.
+ */
+export function adjustToLatestMonths(amount: number | null | undefined, fromYear: number, table: CpiTable): LatestAdjustment {
+  const period = table.latestTwelveMonths;
+  const toYear = period ? Number(period.lastPeriod.slice(0, 4)) : fromYear;
+  const original = amount === undefined ? null : amount;
+  const notAdjusted = (reason: string): LatestAdjustment => ({
+    status: "not_adjusted", original, value: null, fromYear, toYear, factor: null, reason, period,
+  });
+
+  if (!isUsableAmount(amount)) {
+    return notAdjusted("There is no usable amount to convert.");
+  }
+  if (!period) {
+    return notAdjusted("The loaded CPI does not have twelve consecutive recent months.");
+  }
+  const fromCpi = table.values.get(fromYear);
+  if (fromCpi === undefined) {
+    return notAdjusted(missingYearReason(fromYear, table));
+  }
+  const factor = period.value / fromCpi;
+  return { status: "adjusted", original: amount, value: amount * factor, fromYear, toYear, factor, reason: null, period };
+}
+
+// ------------------------------------------------------------------ rates and indexes
+
+/**
+ * The average yearly inflation rate between two years, as a percent (compound).
+ * Prices rising 20% over 10 years is about 1.84% a year, not 2%.
+ */
+export function annualizedInflation(fromYear: number, toYear: number, table: CpiTable): number | null {
+  if (!isUsableYear(fromYear) || !isUsableYear(toYear)) {
+    return null;
+  }
+  if (fromYear === toYear) {
+    return 0;
+  }
+  const fromCpi = table.values.get(fromYear);
+  const toCpi = table.values.get(toYear);
+  if (fromCpi === undefined || toCpi === undefined) {
+    return null;
+  }
+  const years = toYear - fromYear;
+  return (Math.pow(toCpi / fromCpi, 1 / years) - 1) * 100;
+}
+
+/** One complete year's inflation compared with the year before (null across a gap). */
+export type YearOverYear = { year: number; annualCpi: number; inflationPercent: number | null };
+
+/** Year-over-year inflation for every complete year, oldest first. */
+export function yearOverYear(table: CpiTable): YearOverYear[] {
+  return completeYears(table).map(year => {
+    const current = table.values.get(year)!;
+    const previous = table.values.get(year - 1);
+    return {
+      year,
+      annualCpi: current,
+      inflationPercent: previous === undefined ? null : (current / previous - 1) * 100,
+    };
+  });
+}
+
+/** Every complete year's CPI on a new base where `baseYear` = 100; null when the base year has no CPI. */
+export function rebaseCpi(table: CpiTable, baseYear: number): Map<number, number> | null {
+  const base = table.values.get(baseYear);
+  if (base === undefined) {
+    return null;
+  }
+  const rebased = new Map<number, number>();
+  for (const year of completeYears(table)) {
+    rebased.set(year, (table.values.get(year)! / base) * 100);
+  }
+  return rebased;
+}
+
+// ------------------------------------------------------------------ affordability over time
+
+/** The share of income used as the affordability reference point (CMHC's 30%). */
+export const AFFORDABILITY_GUIDELINE_PERCENT = 30;
+
+/** Rent and income for one year, each in that year's own dollars. */
+export type RentIncomePoint = { year: number; monthlyRent: number | null; annualIncome: number | null };
+
+/** Rent as a share of income in one year. */
+export type AffordabilityPoint = {
+  year: number;
+  monthlyRent: number | null;
+  annualIncome: number | null;
+  shareOfIncomePercent: number | null;
+  meetsGuideline: boolean | null;
+};
+
+/** How rent compared with income across years. */
+export type AffordabilityTrend = {
+  points: AffordabilityPoint[];
+  firstYear: number | null;
+  lastYear: number | null;
+  /** Change in rent's share of income, in percentage points; null when either end has no share. */
+  shareChangePoints: number | null;
+  rentChange: RealChange | null;
+  incomeChange: RealChange | null;
+  /** True when rent grew faster than income (in published dollars, which is the same as after inflation). */
+  rentOutpacedIncome: boolean | null;
+  summary: string;
+};
+
+/** Rent ÷ monthly income for one year. No CPI is needed: rent and income are from the same year. */
+export function affordabilityPoint(point: RentIncomePoint): AffordabilityPoint {
+  const usable = isUsableAmount(point.monthlyRent) && isUsableAmount(point.annualIncome) && point.annualIncome > 0;
+  if (!usable) {
+    return { ...point, shareOfIncomePercent: null, meetsGuideline: null };
+  }
+  const share = (point.monthlyRent! / (point.annualIncome! / 12)) * 100;
+  return { ...point, shareOfIncomePercent: share, meetsGuideline: share <= AFFORDABILITY_GUIDELINE_PERCENT };
+}
+
+/**
+ * Whether rent became harder or easier to afford relative to income across years,
+ * and how rent and income each grew before and after inflation. Points are
+ * sorted by year; the first and last points with a usable share are compared.
+ */
+export function affordabilityTrend(points: RentIncomePoint[], table: CpiTable): AffordabilityTrend {
+  const ordered = [...points].sort((a, b) => a.year - b.year).map(affordabilityPoint);
+  const usable = ordered.filter(p => p.shareOfIncomePercent !== null);
+
+  if (usable.length < 2) {
+    return {
+      points: ordered,
+      firstYear: usable[0]?.year ?? null,
+      lastYear: usable[usable.length - 1]?.year ?? null,
+      shareChangePoints: null,
+      rentChange: null,
+      incomeChange: null,
+      rentOutpacedIncome: null,
+      summary: "At least two years with both rent and income are needed to show a trend.",
+    };
+  }
+
+  const first = usable[0];
+  const last = usable[usable.length - 1];
+  const shareChangePoints = last.shareOfIncomePercent! - first.shareOfIncomePercent!;
+  const rentChange = realChange(first.monthlyRent!, last.monthlyRent!, first.year, last.year, table);
+  const incomeChange = realChange(first.annualIncome!, last.annualIncome!, first.year, last.year, table);
+  const rentOutpacedIncome = rentChange.nominalPercent !== null && incomeChange.nominalPercent !== null
+    ? rentChange.nominalPercent > incomeChange.nominalPercent
+    : null;
+
+  const points1 = Math.round(Math.abs(shareChangePoints) * 10) / 10;
+  const summary = shareChangePoints > 0
+    ? `Rent took a larger share of income in ${last.year} than in ${first.year} (up ${points1} percentage points).`
+    : shareChangePoints < 0
+      ? `Rent took a smaller share of income in ${last.year} than in ${first.year} (down ${points1} percentage points).`
+      : `Rent took the same share of income in ${first.year} and ${last.year}.`;
+
+  return { points: ordered, firstYear: first.year, lastYear: last.year, shareChangePoints, rentChange, incomeChange, rentOutpacedIncome, summary };
+}
+
+// ------------------------------------------------------------------ ready-to-show values for a dollar toggle
+
+/** One value ready to show under a chosen dollar basis. */
+export type DisplayValue = {
+  year: number;
+  /** The number to show: the adjusted value, or the original when showing as published or when it could not be adjusted. */
+  shown: number | null;
+  original: number | null;
+  /** True when `shown` is an inflation-adjusted value. */
+  adjusted: boolean;
+  label: string;
+  /** Why the value is shown as published even though adjustment was asked for. */
+  note: string | null;
+};
+
+/**
+ * Turns a series into values ready for a "show dollars as…" toggle. With the
+ * nominal basis everything is shown as published; with a year basis each value
+ * is converted, and any value that cannot be converted is shown as published
+ * with a note, never hidden and never guessed.
+ */
+export function applyDollarBasis(series: YearValue[], basis: DollarBasisOption, table: CpiTable): DisplayValue[] {
+  return series.map(point => {
+    if (basis.year === null) {
+      return { year: point.year, shown: point.value, original: point.value, adjusted: false, label: `${point.year} dollars`, note: null };
+    }
+    const adjustment = adjustForInflation(point.value, point.year, basis.year, table);
+    if (adjustment.status === "not_adjusted") {
+      return {
+        year: point.year,
+        shown: point.value,
+        original: point.value,
+        adjusted: false,
+        label: dollarLabel(adjustment),
+        note: point.value === null ? null : adjustment.reason,
+      };
+    }
+    return {
+      year: point.year,
+      shown: adjustment.value,
+      original: point.value,
+      adjusted: adjustment.status === "adjusted",
+      label: dollarLabel(adjustment),
+      note: null,
+    };
+  });
+}
+
+/** The one note to show under a set of values: the CPI note when any value was adjusted, else the nominal note. */
+export function basisNote(values: DisplayValue[]): string {
+  return values.some(v => v.adjusted) ? ADJUSTMENT_NOTE : NOMINAL_NOTE;
 }
