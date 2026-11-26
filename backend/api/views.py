@@ -23,6 +23,7 @@ from . import derived_census
 from .boundary_crosswalk import boundary_links
 from .parks import ParksUnavailable, nearby_parks
 from .land_use import LandUseUnavailable, land_use
+from . import transit
 
 
 @require_GET
@@ -492,3 +493,70 @@ def teacher_ask(request):
         return JsonResponse(ask_teacher(question, context))
     except TeacherUnavailable as exc:
         return JsonResponse({"error": str(exc)}, status=503)
+
+
+MAX_TRANSIT_ORIGINS = 10
+# Greater Toronto: the TTC network plus a margin for destinations just outside the city.
+TRANSIT_BOUNDS = (43.40, 44.05, -79.90, -78.90)  # min lat, max lat, min lng, max lng
+
+
+def _point(value):
+    if not isinstance(value, dict):
+        return None
+    lat, lng = value.get("lat"), value.get("lng")
+    if not all(isinstance(n, (int, float)) and not isinstance(n, bool) for n in (lat, lng)):
+        return None
+    min_lat, max_lat, min_lng, max_lng = TRANSIT_BOUNDS
+    return (float(lat), float(lng)) if min_lat <= lat <= max_lat and min_lng <= lng <= max_lng else None
+
+
+@csrf_exempt  # JSON API with no login or cookies; the frontend posts through the Next.js proxy
+@require_POST
+def transit_commute(request):
+    """Scheduled TTC travel time from each origin to one destination, arriving by a weekday time.
+
+    Body: {"destination": {lat, lng}, "origins": [{id, lat, lng}], "arrive_by": "HH:MM"?}.
+    POST keeps the destination out of URLs and server logs; nothing is stored.
+    """
+    if len(request.body) > 20_000:
+        return JsonResponse({"error": "Request is too large"}, status=413)
+    try:
+        body = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Body must be JSON"}, status=400)
+    if not isinstance(body, dict):
+        return JsonResponse({"error": "Body must be an object"}, status=400)
+    destination = _point(body.get("destination"))
+    if destination is None:
+        return JsonResponse({"error": "destination must be {lat, lng} in the Toronto area"}, status=400)
+    raw_origins = body.get("origins")
+    if not isinstance(raw_origins, list) or not 1 <= len(raw_origins) <= MAX_TRANSIT_ORIGINS:
+        return JsonResponse({"error": f"origins must list 1 to {MAX_TRANSIT_ORIGINS} places"}, status=400)
+    origins = []
+    for item in raw_origins:
+        point = _point(item)
+        if point is None or not isinstance(item.get("id"), str) or not item["id"]:
+            return JsonResponse({"error": "each origin needs an id and {lat, lng} in the Toronto area"}, status=400)
+        origins.append((item["id"], *point))
+    try:
+        arrive_by = transit.parse_arrive_by(body.get("arrive_by"))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    try:
+        index = transit.load_index()
+    except transit.TransitUnavailable as exc:
+        return JsonResponse({"status": "unavailable", "error": str(exc)}, status=503)
+    feed = index["feed"]
+    return JsonResponse({
+        "status": "ok",
+        "service_date": index["service_date"],
+        "arrive_by": f"{arrive_by // 3600:02d}:{arrive_by % 3600 // 60:02d}",
+        "source": {"id": f"ttc-gtfs-{feed['version']}", "title": "Merged GTFS – TTC routes and schedules",
+                   "publisher": "Toronto Transit Commission",
+                   "url": "https://open.toronto.ca/dataset/merged-gtfs-ttc-routes-and-schedules/",
+                   "version": feed["version"], "valid_from": feed["start"], "valid_to": feed["end"]},
+        "method": ("Published TTC weekday schedule, no real-time delays. Walking to, between and from stops "
+                   "is estimated from straight-line distance (x1.3) at 4.8 km/h, up to 1 km at each end and "
+                   "250 m between stops, with 1 minute to change vehicles."),
+        "results": transit.commute_times(index, destination, origins, arrive_by),
+    })

@@ -27,7 +27,7 @@ const table = (s: NearbySnapshot, id = "toronto-158-1") => renderToStaticMarkup(
 
 describe("Everyday needs", () => {
   it("waits for the map instead of showing zeros", () => {
-    const html = renderToStaticMarkup(createElement(NeighbourhoodDetailsPanel, { profile, income: "", budget: "", onIncomeChange: () => {}, onBudgetChange: () => {} }));
+    const html = renderToStaticMarkup(createElement(NeighbourhoodDetailsPanel, { profile }));
     expect(html).toContain("Nearby distances appear once the map has loaded this neighbourhood.");
   });
   it("shows the map's count, nearest distance and walking estimate", () => {

@@ -3,12 +3,26 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { usePathname } from "next/navigation";
 import type { NeighbourhoodProfile } from "../explorer/types";
 import { measuredNumber, money } from "../explorer/NeighbourhoodDetailsPanel";
+import type { ScreenScore } from "./scoring";
 import styles from "./workflow.module.css";
-export type TeachingContext = { title: string; profiles: NeighbourhoodProfile[] } | null;
-const TeacherContext = createContext<{ context: TeachingContext; setContext: (value: TeachingContext) => void; openTeacher: () => void }>({ context: null, setContext: () => {}, openTeacher: () => {} });
+/** What is on screen. `match_scores` is sent to the teacher as shown, so it quotes rather than recomputes. */
+export type TeachingContext = { title: string; match_scores?: ScreenScore[]; profiles: NeighbourhoodProfile[] } | null;
+const TeacherContext = createContext<{ context: TeachingContext; setContext: (value: TeachingContext) => void; openTeacher: () => void; scores: string | null; setScores: (value: string | null) => void }>({ context: null, setContext: () => {}, openTeacher: () => {}, scores: null, setScores: () => {} });
 export const useTeacher = () => useContext(TeacherContext);
+/** Shares the match scores a page shows with the AI teacher, and clears them when the page goes away.
+ * Kept as JSON text so an unchanged score does not trigger another update. */
+export function useTeacherScores(scores: ScreenScore[] | null) {
+  const { setScores } = useTeacher();
+  const key = scores?.length ? JSON.stringify(scores) : null;
+  useEffect(() => { setScores(key); return () => setScores(null); }, [key, setScores]);
+}
+/** The context sent with a question: match scores first, so they are not cut off by long profiles. */
+export function withScores(context: TeachingContext, scores: string | null): TeachingContext {
+  return context && scores ? { title: context.title, match_scores: JSON.parse(scores) as ScreenScore[], profiles: context.profiles } : context;
+}
 export function TeacherProvider({ children }: { children: ReactNode }) {
   const [context, setContext] = useState<TeachingContext>(null);
+  const [scores, setScores] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const openTeacher = useCallback(() => setOpen(true), []);
@@ -18,16 +32,21 @@ export function TeacherProvider({ children }: { children: ReactNode }) {
     if (open && !panel.current?.open) panel.current?.showModal();
     if (!open && panel.current?.open) panel.current?.close();
   }, [open]);
-  return <TeacherContext.Provider value={{ context, setContext, openTeacher }}>{children}
+  return <TeacherContext.Provider value={{ context, setContext, openTeacher, scores, setScores }}>{children}
     {!pathname?.startsWith("/housing/compare") && !(isMap && context) && <button type="button" className={styles.teacherLauncher} onClick={openTeacher}>✦ Ask the AI teacher</button>}
     <dialog ref={panel} className={styles.teacherDialog} onCancel={() => setOpen(false)} onClose={() => setOpen(false)} aria-label="Your history teacher"><TeacherPanel onClose={() => setOpen(false)} /></dialog>
   </TeacherContext.Provider>;
 }
 export function explainEvidence(question: string, context: TeachingContext): string {
   const profiles = context?.profiles ?? [];
-  if (/commute|school|safety|amenit|lifestyle|gap|missing|unavailable/i.test(question)) return "Commute times, safety, amenity distances and lifestyle scores are not connected. Those factors are excluded, not estimated. Your saved preferences do not make those measurements available.";
+  if (/commute|school|safety|amenit|lifestyle|gap|missing|unavailable/i.test(question)) return "Commute and school travel times appear in the comparison when your profile has a work or school address. They are present-day times from a central point in each neighbourhood: transit uses the published TTC weekday schedule, and walking, cycling and driving use Mapbox routes. Safety, place counts within 1 km and lifestyle scores are shown in the comparison where data exists. Missing factors are excluded, not estimated.";
   if (/history|historic|change|time|evidence/i.test(question)) return "The map uses present-day imagery. Census years describe published measurements, not historical photographs. Each neighbourhood keeps one boundary across time. Historical 140 covers 2001–2021: its 2021 values come from the identical 2021 area or, for areas split in 2021, combine their parts. Current 158 shows earlier years only for areas whose boundary did not change. Renter shelter cost is the same average in every year, but dollars are nominal and 2016 is not published. The data shows how values changed, not why; no historical cause is established without dated records.";
-  if (/recommend|score|rank|tradeoff/i.test(question)) return "The current starting points are filtered to your rent budget and ordered by the lowest published 2021 renter shelter cost; if none fit, the lowest available benchmarks are shown above budget. They are budget illustrations, not current listings or an overall neighbourhood fit score. Commute, lifestyle and safety do not affect the order because those datasets are unavailable. Review the missing factors before choosing a place.";
+  if (/recommend|score|rank|tradeoff|match/i.test(question)) {
+    const scores = context?.match_scores ?? [];
+    const named = scores.filter(s => question.toLowerCase().includes(s.neighbourhood.toLowerCase()));
+    if (scores.length) return (named.length ? named : scores).map(s => `${s.neighbourhood}: match score ${s.match_score ?? "unavailable"} / 100, based on ${s.based_on}. ${s.why.join(" ")}`).join("\n\n");
+    return "Each neighbourhood gets a match score from 0 to 100 from your profile: affordability (rent against your budget and income), trips to your work and school addresses, nearby amenities, safety and your lifestyle priorities, each weighted the way you set them. Factors without data are left out and the others share their weight; nothing is counted as zero. Recommendations are your five best-matching neighbourhoods by this score. Complete your profile to see a score.";
+  }
   if (profiles.length) return profiles.map(p => {
     const n = measuredNumber(p.metrics.cost);
     return `${p.geography.name}: ${p.year} Census renter shelter cost ${n === null ? "unavailable" : `${money(n)} per month`}. Household-income reference year: ${p.metrics.income.reference_year ?? "unavailable"}. Dollar amounts are nominal, not current asking rents. A dash means unavailable, never zero.`;
@@ -50,7 +69,8 @@ export async function askAgent(question: string, context: TeachingContext, timeo
   } finally { clearTimeout(timer); }
 }
 export function TeacherPanel({ onClose }: { onClose?: () => void }) {
-  const { context } = useTeacher();
+  const { context: screen, scores } = useTeacher();
+  const context = withScores(screen, scores);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<TeacherMessage[]>([]);
   const busy = messages.some(m => m.status === "pending");

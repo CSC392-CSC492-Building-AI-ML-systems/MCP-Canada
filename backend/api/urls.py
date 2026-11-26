@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import boundaries, land_use_view, parks_nearby, catalog, comparison, health, mcp_canada_cpi, observations, observations_batch, places, teacher_ask
+from .views import boundaries, land_use_view, parks_nearby, catalog, comparison, health, mcp_canada_cpi, observations, observations_batch, places, teacher_ask, transit_commute
 
 urlpatterns = [
     path("health/", health, name="health"),
@@ -13,4 +13,5 @@ urlpatterns = [
     path("boundaries/", boundaries, name="boundaries"),
     path("mcp-canada/cpi/", mcp_canada_cpi, name="mcp-canada-cpi"),
     path("teacher/ask/", teacher_ask, name="teacher-ask"),
+    path("transit/commute/", transit_commute, name="transit-commute"),
 ]
