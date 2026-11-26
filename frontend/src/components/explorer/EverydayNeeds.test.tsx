@@ -30,6 +30,15 @@ describe("Everyday needs", () => {
     const html = renderToStaticMarkup(createElement(NeighbourhoodDetailsPanel, { profile }));
     expect(html).toContain("Nearby distances appear once the map has loaded this neighbourhood.");
   });
+  it("offers profile setup instead of empty personal metrics", () => {
+    const html = renderToStaticMarkup(createElement(NeighbourhoodDetailsPanel, { profile }));
+    expect(html).toContain("Set up your profile");
+    expect(html).toContain("Add income");
+    expect(html).toContain("Add work address");
+    expect(html).toContain("Add school address");
+    expect(html).not.toContain("No profile");
+    expect(html).toContain('href="/housing/profile');
+  });
   it("shows the map's count, nearest distance and walking estimate", () => {
     const html = table(snapshot);
     // Street route: 450 m and 6 minutes along streets, not the 347 m straight line.
