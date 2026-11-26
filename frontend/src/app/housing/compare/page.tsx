@@ -17,7 +17,7 @@ function DataAttribution({ sourceIds }: { sourceIds: string[] }) {
   const has = (prefix: string) => sourceIds.some(id => id.startsWith(prefix));
   const notes = [
     has("osm-groceries-") && <>Grocery locations © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>, available under the Open Database License.</>,
-    has("crime-rates-") && <>Contains information licensed under the <a href="https://www.ontario.ca/page/open-government-licence-ontario" target="_blank" rel="noreferrer">Open Government Licence – Ontario</a> (Toronto Police Service).</>,
+    (has("crime-rates-") || has("mcp-canada-crime-rates")) && <>Contains information licensed under the <a href="https://www.ontario.ca/page/open-government-licence-ontario" target="_blank" rel="noreferrer">Open Government Licence – Ontario</a> (Toronto Police Service).</>,
     has("toronto-green-spaces-") && <>Green spaces: contains information licensed under the <a href="https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-licence/" target="_blank" rel="noreferrer">Open Government Licence – Toronto</a>.</>,
     has("ttc-gtfs-") && <>Transit times: contains information licensed under the <a href="https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-licence/" target="_blank" rel="noreferrer">Open Government Licence – Toronto</a> (TTC schedules).</>,
     has("mapbox-") && <>Walking, cycling and driving routes © <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.</>,

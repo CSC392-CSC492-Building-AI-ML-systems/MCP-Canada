@@ -130,8 +130,16 @@ export function rankSafety(rates: Map<string, number>, id: string, year: number)
   return { rate, year, cityMedian, saferThanPct: Math.round(all.filter(r => r > rate).length / all.length * 100) };
 }
 
+/** The police crime release to read: MCP-Canada first (backend `load_crime_from_mcp` saves it
+ * as `mcp-canada-crime-rates`, checked with `compare_crime_sources`), else the CSV release
+ * `crime-rates-...`. Returns a list so callers keep their "exactly one release" check. */
+export function crimeSources<S extends { id: string }>(sources: S[]): S[] {
+  const mcp = sources.filter(s => s.id === "mcp-canada-crime-rates");
+  return mcp.length ? mcp : sources.filter(s => s.id.startsWith("crime-rates-"));
+}
+
 async function safety(catalog: Catalog, profiles: NeighbourhoodProfile[], year: number, signal?: AbortSignal) {
-  const releases = catalog.sources.filter(s => s.id.startsWith("crime-rates-"));
+  const releases = crimeSources(catalog.sources);
   const gap = (reason: string) => ({ byPlace: Object.fromEntries(profiles.map(p => [p.geography.id, { safety: null, safetyGap: reason }])), source: null });
   if (releases.length !== 1 || !MAJOR_CRIMES.every(c => catalog.indicators.some(i => i.id === `tps-crime-${c}-rate`))) return gap("Police crime data not loaded");
   if (year < CRIME_YEARS.first || year > CRIME_YEARS.last) return gap(`Police data covers ${CRIME_YEARS.first}–${CRIME_YEARS.last}`);

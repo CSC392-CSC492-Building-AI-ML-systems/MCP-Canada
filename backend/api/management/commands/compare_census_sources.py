@@ -11,7 +11,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from api.models import Observation, SourceRelease
 
-YEARS = (2006, 2011, 2016, 2021)
+YEARS = (2001, 2006, 2011, 2016, 2021)
 
 
 def rows_for(source_id, year):
