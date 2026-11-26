@@ -292,6 +292,14 @@ export default function MapView({ selected, boundaries, selectedGeographyId, onG
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!ready || !map) return;
+    for (const layer of ["neighbourhood-casing", "neighbourhood-outline"]) {
+      map.setLayoutProperty(layer, "visibility", showBoundaries ? "visible" : "none");
+    }
+  }, [ready, showBoundaries]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map) return;
     markerRef.current?.remove();
     markerRef.current = null;
