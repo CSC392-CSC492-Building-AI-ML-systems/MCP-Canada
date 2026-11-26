@@ -131,6 +131,10 @@ class MCPFirstTests(SimpleTestCase):
         self.assertIn("MCP-Canada is unavailable", result(tools, "find_canada_data_tools", query="rent")["error"])
         self.assertTrue(tools.tried_mcp)
 
+    def test_screen_values_are_tidied(self):
+        tools = TeacherTools({"title": "Annex", "value": "1740.00000000"})
+        self.assertEqual(result(tools, "get_screen_values"), {"title": "Annex", "value": "1740"})
+
     def test_screen_values_need_no_mcp_canada(self):
         tools = TeacherTools({"title": "Annex"}, mcp_client=FakeMCPClient(), fetch=fake_fetch())
         self.assertEqual(result(tools, "get_screen_values"), {"title": "Annex"})
