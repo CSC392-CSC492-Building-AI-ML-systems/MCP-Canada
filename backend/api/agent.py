@@ -76,6 +76,12 @@ How to answer:
   score. A factor marked unavailable was left out, not counted as zero.
 - For data that is not on screen, look in MCP-Canada first: find_canada_data_tools,
   then get_canada_data.
+- If the screen values don't include the exact measure the student asked for (for
+  example they ask for an average and the screen shows a median), search MCP-Canada for
+  that measure before saying it is not available. Quote what the screen shows as well.
+- For questions about rent, also give the city-wide average rent from sc_get_toronto_rents
+  (latest year), labelled as covering the whole Toronto area, next to any neighbourhood
+  values.
 - Only if MCP-Canada has no tool for it, or its tool fails or returns no rows, check the
   app's database: find_app_data, then get_app_observations. The app database tools refuse
   to run until you have tried MCP-Canada for this question.
@@ -92,7 +98,7 @@ class TeacherUnavailable(Exception):
 # ---------------------------------------------------------------- tools (provider-neutral)
 
 def _tidy_numbers(value):
-    """Turn "1740.00000000" into "1740" anywhere inside MCP-Canada's data."""
+    """Turn "1740.00000000" into "1740" anywhere inside MCP-Canada's data or the screen values."""
     if isinstance(value, dict):
         return {key: _tidy_numbers(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -199,7 +205,7 @@ class TeacherTools:
                                    "has no tool for this, or its tool fails or returns no rows."})
         try:
             if name == "get_screen_values":
-                return _clip(self.screen or {"note": "Nothing is selected on screen."})
+                return _clip(_tidy_numbers(self.screen) if self.screen else {"note": "Nothing is selected on screen."})
             if name == "find_canada_data_tools":
                 return self._find(str(args.get("query", "")))
             if name == "get_canada_data":
