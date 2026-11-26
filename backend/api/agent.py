@@ -2,7 +2,7 @@
 
 The model answers only from tools and must quote their values exactly, never
 calculate new ones. For data it looks in MCP-Canada first and falls back to the
-app's own database for what MCP-Canada doesn't have (Census 2001, CMHC, OSM...):
+app's own database for what MCP-Canada doesn't have (CMHC zone rents, OSM places...):
 
   * on screen     get_screen_values      the profiles the student has on screen
   * MCP-Canada    find_canada_data_tools search MCP-Canada's 300+ data tools
@@ -63,6 +63,10 @@ Rules for numbers (these matter most):
   neighbourhoods vs the 158 neighbourhoods), quote both but say clearly that they are
   not directly comparable, and why.
 - Dollar amounts are nominal (not adjusted for inflation) and are not current asking rents.
+- Toronto rents and vacancy rates from sc_get_toronto_rents cover the whole Toronto census
+  metropolitan area (CMHC survey of private apartment buildings), not one neighbourhood.
+  Say so when you use them next to a neighbourhood's values, and never present them as that
+  neighbourhood's rent.
 
 How to answer:
 - For anything about the neighbourhoods on screen, call get_screen_values first.
@@ -127,8 +131,9 @@ class TeacherTools:
         },
         {
             "name": "find_canada_data_tools",
-            "description": "Search MCP-Canada for data tools (Toronto neighbourhood profiles for 2006-2021, "
-                           "CPI, Bank of Canada, Statistics Canada, and more). Returns tool names, "
+            "description": "Search MCP-Canada for data tools (Toronto neighbourhood profiles for 2001-2021, "
+                           "Toronto Police crime rates by neighbourhood, city-wide Toronto rents and "
+                           "vacancy rates, CPI, Bank of Canada, Statistics Canada, and more). Returns tool names, "
                            "descriptions and argument schemas to use with get_canada_data.",
             "parameters": {
                 "type": "object",
@@ -152,7 +157,7 @@ class TeacherTools:
         {
             "name": "find_app_data",
             "description": "Fallback only, after trying MCP-Canada: search the app's own database "
-                           "(e.g. Census 2001, CMHC rents, OSM places) for sources, indicators and "
+                           "(e.g. CMHC rents by zone, OSM places) for sources, indicators and "
                            "geographies whose names match the words. Returns their ids.",
             "parameters": {
                 "type": "object",

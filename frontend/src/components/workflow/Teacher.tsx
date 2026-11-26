@@ -54,18 +54,20 @@ export function explainEvidence(question: string, context: TeachingContext): str
   return "Start by opening the map and selecting a neighbourhood, or compare saved places. I can explain the loaded Census values, their years, missing data and comparison limits. This source guide uses prepared explanations; an AI model is not connected yet.";
 }
 type TeacherSource = { title: string; url: string };
-type TeacherMessage = { id: number; question: string; answer: string; context: TeachingContext; sources: TeacherSource[]; status: "pending" | "agent" | "fallback" };
+type TeacherMessage = { id: number; question: string; answer: string; context: TeachingContext; sources: TeacherSource[]; usedScreen?: boolean; status: "pending" | "agent" | "fallback" };
 /** Ask the backend agent (Django /api/teacher/ask/). Throws if it is unavailable, so the caller can fall back. */
-export async function askAgent(question: string, context: TeachingContext, timeoutMs = 60000): Promise<{ answer: string; sources: TeacherSource[] }> {
+export async function askAgent(question: string, context: TeachingContext, timeoutMs = 60000): Promise<{ answer: string; sources: TeacherSource[]; usedScreen: boolean }> {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   try {
     const response = await fetch("/api/teacher/ask/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, context }), signal: abort.signal });
     if (!response.ok) throw new Error(`AI teacher returned ${response.status}`);
-    const data = await response.json() as { answer?: string; sources?: { tool?: string; api?: string; url?: string }[] };
+    const data = await response.json() as { answer?: string; sources?: { tool?: string; api?: string; url?: string }[]; tool_calls?: { tool?: string }[] };
     if (!data.answer) throw new Error("AI teacher returned no answer");
     const sources = (data.sources ?? []).filter(s => s.url).map(s => ({ title: s.api || s.tool || "Source", url: s.url as string }));
-    return { answer: data.answer.replace(/\*\*(.+?)\*\*/g, "$1"), sources };
+    // The on-screen sources are listed only when the teacher actually read the screen values.
+    const usedScreen = (data.tool_calls ?? []).some(c => c.tool === "get_screen_values");
+    return { answer: data.answer.replace(/\*\*(.+?)\*\*/g, "$1"), sources, usedScreen };
   } finally { clearTimeout(timer); }
 }
 export function TeacherPanel({ onClose }: { onClose?: () => void }) {
@@ -93,7 +95,7 @@ export function TeacherPanel({ onClose }: { onClose?: () => void }) {
     <header><h2 id={onClose ? "teacher-dialog-title" : "teacher-title"}>✦ Your history teacher</h2>{onClose && <button type="button" onClick={onClose} aria-label="Close teacher">×</button>}</header>
     <p className={styles.caption}>{context?.title ?? "Learn from the evidence"}</p>
     <p className={styles.teacherNotice}>AI teacher · quotes published data only, never estimates</p>
-    <div className={styles.teacherLog} ref={log} role="log" aria-live="polite"><div className={styles.answer}>Let’s read the data together. Ask about Census periods, missing information, housing benchmarks or recommendation tradeoffs.</div>{messages.map(message => <div key={message.id}><p className={styles.question}>{message.question}</p><div className={styles.answer} aria-busy={message.status === "pending"}><p>{message.answer}</p>{message.status === "fallback" && <p className={styles.teacherNotice}>The AI teacher is unavailable, so this is a prepared explanation.</p>}{message.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a>)}{[...new Map(message.context?.profiles.flatMap(p => Object.values(p.metrics).flatMap(m => m.source ? [[m.source.id, m.source] as const] : [])) ?? []).values()].map(source => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a>)}</div></div>)}</div>
+    <div className={styles.teacherLog} ref={log} role="log" aria-live="polite"><div className={styles.answer}>Let’s read the data together. Ask about Census periods, missing information, housing benchmarks or recommendation tradeoffs.</div>{messages.map(message => <div key={message.id}><p className={styles.question}>{message.question}</p><div className={styles.answer} aria-busy={message.status === "pending"}><p>{message.answer}</p>{message.status === "fallback" && <p className={styles.teacherNotice}>The AI teacher is unavailable, so this is a prepared explanation.</p>}{message.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a>)}{(message.status === "fallback" || message.usedScreen) && [...new Map(message.context?.profiles.flatMap(p => Object.values(p.metrics).flatMap(m => m.source ? [[m.source.id, m.source] as const] : [])) ?? []).values()].map(source => <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a>)}</div></div>)}</div>
     <form className={styles.teacherForm} onSubmit={event => { event.preventDefault(); ask(question); }}>
       <div className={styles.prompts}>{["Explain these Census values", "How do data gaps affect comparisons?", "What historical evidence should I look for?"].map(prompt => <button type="button" key={prompt} onClick={() => ask(prompt)}>{prompt}</button>)}</div>
       <label className={styles.srOnly} htmlFor={onClose ? "teacher-dialog-question" : "teacher-question"}>Ask about the data</label><textarea id={onClose ? "teacher-dialog-question" : "teacher-question"} maxLength={1000} rows={2} value={question} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the data…" required /><button type="submit" className={styles.primary} disabled={busy}>{busy ? "Thinking…" : "Send"}</button>
