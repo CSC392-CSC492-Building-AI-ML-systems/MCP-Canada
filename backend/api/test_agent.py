@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from google.genai import errors, types
 
-from .agent import GeminiModel, TeacherTools, TeacherUnavailable, _tidy_numbers, ask_teacher
+from .agent import GeminiModel, TeacherTools, TeacherUnavailable, _tidy_numbers, ask_teacher, clean_history
 from .mcp_canada import MCPCanadaError
 from .models import Geography, GeographySet, Indicator, Observation, SourceRelease
 
@@ -259,6 +259,22 @@ class GeminiModelTests(SimpleTestCase):
         answer, _ = GeminiModel(model="m1", client=client).answer("Loop", self.tools(), 2)
         self.assertIn("could not finish", answer)
 
+    def test_earlier_turns_go_before_the_new_question(self):
+        client = FakeGemini(reply(text("In 2021 it was $1,740.")))
+        history = [{"question": "Annex rent in 2016?", "answer": "$1,500 in 2016.", "page": "Annex · 2016 Census"}]
+        GeminiModel(model="m1", client=client).answer("What about 2021?", self.tools(), 6, history)
+        sent = client.requests[0][1]
+        self.assertEqual([c.role for c in sent], ["user", "model", "user"])
+        self.assertEqual(sent[0].parts[0].text, "[Asked on: Annex · 2016 Census]\nAnnex rent in 2016?")
+        self.assertEqual(sent[1].parts[0].text, "$1,500 in 2016.")
+        # The new question is marked with the page open now.
+        self.assertEqual(sent[2].parts[0].text, "[Asked on: Annex]\nWhat about 2021?")
+
+    def test_no_history_sends_only_the_question(self):
+        client = FakeGemini(reply(text("Hi")))
+        GeminiModel(model="m1", client=client).answer("Hi", self.tools(), 6)
+        self.assertEqual([c.parts[0].text for c in client.requests[0][1]], ["Hi"])
+
     def test_no_key_means_unavailable(self):
         with mock.patch.dict("os.environ", {"GEMINI_API_KEY": ""}):
             with self.assertRaises(TeacherUnavailable):
@@ -278,9 +294,36 @@ class AskTeacherTests(SimpleTestCase):
         self.assertEqual(out["tool_calls"][0]["tool"], "get_canada_data")
         self.assertEqual(out["model"], "m1")
 
+    def test_passes_the_cleaned_history_to_the_model(self):
+        client = FakeGemini(reply(text("Hi")))
+        ask_teacher("And 2021?", None, history=[{"question": " Q ", "answer": " A ", "page": ""}, "junk"],
+                    model=GeminiModel(model="m1", client=client), mcp_client=FakeMCPClient(), fetch=fake_fetch())
+        self.assertEqual([c.parts[0].text for c in client.requests[0][1]], ["Q", "A", "And 2021?"])
+
     def test_empty_question_is_rejected(self):
         with self.assertRaises(ValueError):
             ask_teacher("   ", None, model=GeminiModel(model="m1", client=FakeGemini()))
+
+
+class CleanHistoryTests(SimpleTestCase):
+    def test_keeps_only_whole_turns(self):
+        self.assertEqual(clean_history([
+            {"question": "Q1", "answer": "A1", "page": "Annex"},
+            {"question": "Q2", "answer": ""},          # no answer
+            {"question": 3, "answer": "A3"},           # not text
+            "Q4",
+            {"question": "Q5", "answer": "A5", "page": 7},
+        ]), [{"question": "Q1", "answer": "A1", "page": "Annex"},
+             {"question": "Q5", "answer": "A5", "page": None}])
+
+    def test_keeps_the_last_six_and_trims_long_text(self):
+        turns = clean_history([{"question": f"Q{i}", "answer": "x" * 5000} for i in range(10)])
+        self.assertEqual([t["question"] for t in turns], ["Q4", "Q5", "Q6", "Q7", "Q8", "Q9"])
+        self.assertEqual(len(turns[0]["answer"]), 1500)
+
+    def test_not_a_list(self):
+        self.assertEqual(clean_history(None), [])
+        self.assertEqual(clean_history({"question": "Q"}), [])
 
 
 class TeacherViewTests(SimpleTestCase):
@@ -292,7 +335,13 @@ class TeacherViewTests(SimpleTestCase):
             response = self.post({"question": "Hi", "context": {"title": "Annex"}})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"answer": "Hi"})
-        ask.assert_called_once_with("Hi", {"title": "Annex"})
+        ask.assert_called_once_with("Hi", {"title": "Annex"}, history=[])
+
+    def test_history_is_passed_on(self):
+        history = [{"question": "Q", "answer": "A", "page": "Annex"}]
+        with mock.patch("api.views.ask_teacher", return_value={"answer": "Hi"}) as ask:
+            self.post({"question": "Hi", "context": None, "history": history})
+        ask.assert_called_once_with("Hi", None, history=history)
 
     def test_503_when_the_model_is_unavailable(self):
         with mock.patch("api.views.ask_teacher", side_effect=TeacherUnavailable("GEMINI_API_KEY is not set")):
@@ -302,6 +351,7 @@ class TeacherViewTests(SimpleTestCase):
     def test_bad_input(self):
         self.assertEqual(self.post({"question": ""}).status_code, 400)
         self.assertEqual(self.post({"question": "Hi", "context": "Annex"}).status_code, 400)
+        self.assertEqual(self.post({"question": "Hi", "history": "Q"}).status_code, 400)
         self.assertEqual(self.client.post(reverse("teacher-ask"), "not json",
                                           content_type="application/json").status_code, 400)
 

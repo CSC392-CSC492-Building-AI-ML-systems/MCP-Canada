@@ -65,6 +65,9 @@
 .teacher h2 { margin: 0; color: #295738; font-size: 20px; }
 .teacher header button { width: 30px; height: 30px; background: none; border: 1px solid #d6cfba; border-radius: 50%; font-size: 22px; cursor: pointer; }
 .teacher > p { margin: 0; line-height: 1.5; }
+.teacher header .clearChat { width: auto; height: auto; margin-left: auto; padding: 4px 10px; border-radius: 14px; color: #295738; font: inherit; font-size: 11px; }
+.teacher header .clearChat:disabled { opacity: .5; cursor: default; }
+.askedOn { display: block; margin-top: 6px; font-size: 10px; opacity: .8; }
 .teacherNotice { font-size: 10px; color: #a84f2b; }
 .teacherLog { overflow-y: auto; overscroll-behavior: contain; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
 .answer { border-radius: 10px; background: #f5f1e3; padding: 14px; font-size: 12px; line-height: 1.6; white-space: pre-line; }

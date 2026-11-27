@@ -88,7 +88,16 @@ How to answer:
 - Name the source of every number you use.
 - If no tool has the data, say it is not available. Do not answer from memory.
 - Keep answers short (under 150 words), plain, and friendly. Explain what a value means
-  and its limits, like a teacher would."""
+  and its limits, like a teacher would.
+
+Earlier questions in this chat:
+- Earlier questions and your answers may come before the new question. Each one is marked
+  with the page it was asked on. Use them only to understand what a follow-up means (for
+  example "what about 2021?" or "and Leaside?").
+- The student may have moved to another page since then. get_screen_values always returns
+  the page open now, not the page of an earlier question.
+- Never reuse a number from an earlier answer. Look it up again with the tools, so every
+  number you give comes from a tool in this turn."""
 
 
 class TeacherUnavailable(Exception):
@@ -106,6 +115,26 @@ def _tidy_numbers(value):
     if isinstance(value, str) and DECIMAL_TEXT.fullmatch(value):
         return format(Decimal(value).normalize(), "f")
     return value
+
+
+MAX_HISTORY_TURNS = 6
+MAX_HISTORY_CHARS = 1500  # per question or answer
+
+
+def clean_history(history) -> list[dict]:
+    """The last few earlier turns, each {"question", "answer", "page"} as trimmed text.
+    Anything else the browser sent is dropped."""
+    turns = []
+    for turn in history if isinstance(history, list) else []:
+        if not isinstance(turn, dict):
+            continue
+        question, answer, page = turn.get("question"), turn.get("answer"), turn.get("page")
+        if not isinstance(question, str) or not isinstance(answer, str) or not question.strip() or not answer.strip():
+            continue
+        turns.append({"question": question.strip()[:MAX_HISTORY_CHARS],
+                      "answer": answer.strip()[:MAX_HISTORY_CHARS],
+                      "page": page.strip()[:200] if isinstance(page, str) and page.strip() else None})
+    return turns[-MAX_HISTORY_TURNS:]
 
 
 def _clip(payload) -> str:
@@ -338,7 +367,8 @@ class GeminiModel:
             self.model = later[0]
             log(f"trying {self.model} instead")
 
-    def answer(self, question: str, tools: TeacherTools, max_steps: int) -> tuple[str, dict]:
+    def answer(self, question: str, tools: TeacherTools, max_steps: int,
+               history: list[dict] = ()) -> tuple[str, dict]:
         from google.genai import types
 
         config = types.GenerateContentConfig(
@@ -350,7 +380,16 @@ class GeminiModel:
             ])],
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
-        contents = [types.Content(role="user", parts=[types.Part.from_text(text=question)])]
+        # Earlier turns first, as plain text (their tool calls are not replayed), then the new question.
+        contents = []
+        for turn in history:
+            asked_on = f"[Asked on: {turn['page']}]\n" if turn.get("page") else ""
+            contents.append(types.Content(role="user", parts=[types.Part.from_text(text=asked_on + turn["question"])]))
+            contents.append(types.Content(role="model", parts=[types.Part.from_text(text=turn["answer"])]))
+        page = tools.screen.get("title") if isinstance(tools.screen, dict) else None
+        if history and page:
+            question = f"[Asked on: {page}]\n{question}"
+        contents.append(types.Content(role="user", parts=[types.Part.from_text(text=question)]))
         usage = {"input_tokens": 0, "output_tokens": 0, "requests": 0}
 
         for _ in range(max_steps + 1):
@@ -376,7 +415,7 @@ class GeminiModel:
 
 # ---------------------------------------------------------------- entry point for the view
 
-def ask_teacher(question: str, screen: dict | None, *, model=None, mcp_client=None,
+def ask_teacher(question: str, screen: dict | None, *, history=None, model=None, mcp_client=None,
                 fetch=fetch_from_mcp_canada) -> dict:
     """Answer one student question. Raises TeacherUnavailable if the model can't be used."""
     question = (question or "").strip()[:1000]
@@ -386,7 +425,10 @@ def ask_teacher(question: str, screen: dict | None, *, model=None, mcp_client=No
     tools = TeacherTools(screen, mcp_client=mcp_client, fetch=fetch)
     model = model or GeminiModel()
     max_steps = int(os.environ.get("TEACHER_MAX_STEPS", "6"))
-    answer, usage = model.answer(question, tools, max_steps)
+    history = clean_history(history)
+    if history:
+        log(f"with {len(history)} earlier turn(s)")
+    answer, usage = model.answer(question, tools, max_steps, history)
     return {
         "answer": answer or "I don't have an answer for that.",
         "sources": tools.sources,

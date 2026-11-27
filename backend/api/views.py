@@ -414,7 +414,9 @@ MAX_TEACHER_CONTEXT_BYTES = 200_000
 @csrf_exempt  # JSON API with no login or cookies; the frontend posts through the Next.js proxy
 @require_POST
 def teacher_ask(request):
-    """Answer one AI-teacher question: {"question": str, "context": {title, profiles} | null}.
+    """Answer one AI-teacher question:
+    {"question": str, "context": {title, profiles} | null, "history": [{question, answer, page}]}.
+    history (optional) is the earlier chat, so follow-up questions make sense.
 
     503 means the model is not configured or not reachable, so the frontend
     falls back to its prepared explanations.
@@ -427,12 +429,15 @@ def teacher_ask(request):
         return JsonResponse({"error": "Body must be JSON"}, status=400)
     question = body.get("question") if isinstance(body, dict) else None
     context = body.get("context") if isinstance(body, dict) else None
+    history = body.get("history", []) if isinstance(body, dict) else []
     if not isinstance(question, str) or not question.strip():
         return JsonResponse({"error": "question is required"}, status=400)
     if context is not None and not isinstance(context, dict):
         return JsonResponse({"error": "context must be an object or null"}, status=400)
+    if not isinstance(history, list):
+        return JsonResponse({"error": "history must be a list"}, status=400)
     try:
-        return JsonResponse(ask_teacher(question, context))
+        return JsonResponse(ask_teacher(question, context, history=history))
     except TeacherUnavailable as exc:
         return JsonResponse({"error": str(exc)}, status=503)
 
